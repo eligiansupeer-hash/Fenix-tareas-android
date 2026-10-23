@@ -129,7 +129,11 @@ class AiClient(private val store: SecureProviderStore) {
 
     private fun callOpenAiCompatible(provider: ProviderConfig, messages: List<ChatMessage>, credential: String?): String {
         val base = provider.baseUrl.trimEnd('/')
-        val endpoint = if (base.endsWith("/v1")) "$base/chat/completions" else "$base/v1/chat/completions"
+        val endpoint = if (base.endsWith("/v1") || base.endsWith("/openai")) {
+            "$base/chat/completions"
+        } else {
+            "$base/v1/chat/completions"
+        }
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"; connectTimeout = 12000; readTimeout = 45000
             doOutput = true; setRequestProperty("Content-Type", "application/json")
