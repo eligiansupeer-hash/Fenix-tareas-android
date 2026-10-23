@@ -61,7 +61,7 @@ fun ChatScreen() {
                 scope.launch {
                     try {
                         val lower = prompt.lowercase()
-                        val answer: Pair<String, String>
+                        var answer: Pair<String, String> = "" to ""
                         if (lower.contains("alarma") || lower.contains("despertador")) {
                             val match = Regex("""(?:a las|para las|las)\s+(\d{1,2})(?::(\d{2}))?""").find(lower)
                             if (match == null) {
