@@ -26,6 +26,15 @@ fun ResultsScreen() {
     var query by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("Todas") }
     var confirmClear by remember { mutableStateOf(false) }
+    var showRetentionMenu by remember { mutableStateOf(false) }
+    val preferences = remember { context.getSharedPreferences("fenix_results_preferences", android.content.Context.MODE_PRIVATE) }
+    var retentionDays by remember { mutableIntStateOf(preferences.getInt("retention_days", 0)) }
+
+    LaunchedEffect(retentionDays) {
+        if (retentionDays > 0) {
+            dao.deleteExecutionsBefore(System.currentTimeMillis() - retentionDays * 24L * 60L * 60L * 1000L)
+        }
+    }
     val statuses = listOf("Todas", "Completada", "Error", "Reintentando", "Cancelada", "En ejecución")
     val filtered = executions.filter { execution ->
         val matchesQuery = query.isBlank() ||
@@ -44,6 +53,32 @@ fun ResultsScreen() {
             OutlinedButton(onClick = { confirmClear = true }, enabled = executions.isNotEmpty()) { Text("Borrar todo") }
         }
         Text("Cada ejecución conserva su propio estado, duración, intentos y resultado en este dispositivo.", style = MaterialTheme.typography.bodySmall)
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Conservar historial:")
+            Box {
+                OutlinedButton(onClick = { showRetentionMenu = true }) {
+                    Text(when (retentionDays) { 30 -> "30 días"; 90 -> "90 días"; else -> "Sin límite" })
+                }
+                DropdownMenu(expanded = showRetentionMenu, onDismissRequest = { showRetentionMenu = false }) {
+                    DropdownMenuItem(text = { Text("Sin límite") }, onClick = {
+                        retentionDays = 0
+                        preferences.edit().putInt("retention_days", 0).apply()
+                        showRetentionMenu = false
+                    })
+                    DropdownMenuItem(text = { Text("30 días") }, onClick = {
+                        retentionDays = 30
+                        preferences.edit().putInt("retention_days", 30).apply()
+                        showRetentionMenu = false
+                    })
+                    DropdownMenuItem(text = { Text("90 días") }, onClick = {
+                        retentionDays = 90
+                        preferences.edit().putInt("retention_days", 90).apply()
+                        showRetentionMenu = false
+                    })
+                }
+            }
+            Text("Los registros antiguos se borran automáticamente según esta elección.", style = MaterialTheme.typography.bodySmall)
+        }
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
