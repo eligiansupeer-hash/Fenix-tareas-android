@@ -245,7 +245,10 @@ private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onCancel) { Text("Detener / cancelar horario") }
+                OutlinedButton(
+                    onClick = onCancel,
+                    enabled = task.enabled || task.status in listOf("En cola", "En ejecución") || task.status.startsWith("Reintentando")
+                ) { Text(if (task.enabled) "Cancelar horario" else "Detener ejecución") }
                 OutlinedButton(onClick = onDelete) { Text("Eliminar") }
             }
         }
