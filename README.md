@@ -38,6 +38,10 @@ Aplicación Android nativa para conversar con modelos de IA, investigar en la we
 GitHub Actions compila la APK de depuración, ejecuta pruebas unitarias y publica un artefacto de instalación. Una compilación verde no sustituye la prueba de red, permisos y alarmas en un dispositivo físico.
 
 
+## Conectores personales (plan de seguridad)
+
+La guía [`docs/GUIA_CONECTORES_CREDENCIALES.md`](docs/GUIA_CONECTORES_CREDENCIALES.md) define el flujo previsto para conectar cuentas propias mediante OAuth, API keys, tokens o contraseñas de aplicación según corresponda. Incluye límites de verificación de Google, permisos mínimos, importación segura de credenciales y almacenamiento cifrado. Es una especificación de implementación; estos conectores todavía no se anuncian como disponibles.
+
 ## Plan técnico
 
 El plan completo por fases, con criterios de salida y una lista de validación en dispositivo, está en [`docs/PLAN_EVOLUCION_TECNICA.md`](docs/PLAN_EVOLUCION_TECNICA.md). La rama de trabajo incluye seguridad web, historial por ejecución, selección de proveedores, notificaciones accionables, retención configurable y flujos encadenados. La integración depende de que CI y las pruebas en dispositivo sean satisfactorias.
