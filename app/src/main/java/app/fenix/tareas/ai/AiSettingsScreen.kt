@@ -23,23 +23,11 @@ fun AiSettingsScreen() {
     var status by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        if (providers.isEmpty()) {
-            val seeded = try {
-                val raw = context.assets.open("provider-catalog.json").bufferedReader().use { it.readText() }
-                val array = JSONObject(raw).getJSONArray("providers")
-                (0 until array.length()).map { ProviderConfig.fromJson(array.getJSONObject(it)) }
-            } catch (_: Exception) {
-                listOf(ProviderConfig("custom", "Proveedor compatible OpenAI", "", "", emptyList(), true, false))
-            }
-            providers = seeded
-            store.save(seeded)
-        }
-    }
+    LaunchedEffect(Unit) { providers = store.loadWithCatalog() }
     val current = providers.getOrNull(selected)
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Proveedores de IA", style = MaterialTheme.typography.headlineMedium)
-        Text("Las claves se cifran localmente con Android Keystore. No se suben a Fénix.", style = MaterialTheme.typography.bodySmall)
+        Text("Las claves se cifran localmente con Android Keystore. No se suben a Fénix. El catálogo nuevo se incorpora sin borrar tus ajustes.", style = MaterialTheme.typography.bodySmall)
         Text("Se permiten hasta 10 credenciales por proveedor y se intenta el siguiente proveedor/clave cuando una llamada falla.")
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(providers) { index, provider ->
@@ -67,7 +55,7 @@ fun AiSettingsScreen() {
                     providers = providers.toMutableList().also { it[selected] = provider.copy(apiKeys = provider.apiKeys + "") }
                 }, modifier = Modifier.fillMaxWidth()) { Text("Agregar API key") }
             } else {
-                Text("Este conector sin clave es experimental; puede dejar de funcionar o exigir acceso.")
+                Text("Sin clave no significa garantía de disponibilidad: Pollinations es experimental, AI Horde usa una cola pública y Ollama requiere un servidor accesible por red.")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
