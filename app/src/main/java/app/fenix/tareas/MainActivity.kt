@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -259,7 +262,7 @@ private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String, Stri
         onDismissRequest = onDismiss,
         title = { Text("Nueva tarea") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 androidx.compose.foundation.layout.Box {
                     OutlinedButton(onClick = { showTemplates = true }, modifier = Modifier.fillMaxWidth()) {
                         Text("Usar plantilla de tarea")
@@ -289,6 +292,15 @@ private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String, Stri
                             onClick = {
                                 title = "Resumen y próximos pasos: [tema]"
                                 instructions = "Prepará un resumen claro de [tema], identificá los puntos clave, qué falta saber, riesgos o límites, y terminá con una lista priorizada de acciones concretas. No inventes datos; indicá qué información no está disponible."
+                                showTemplates = false
+                            }
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Flujo de pasos encadenados") },
+                            onClick = {
+                                title = "Flujo: [objetivo]"
+                                instructions = "Objetivo general: [describí el resultado final esperado]. Usá la salida de cada paso como contexto del siguiente y señalá cualquier limitación."
+                                workflowSteps = "Investigar el tema y reunir fuentes confiables\nComparar la evidencia y detectar contradicciones\nPreparar un informe final con conclusiones y enlaces"
                                 showTemplates = false
                             }
                         )
