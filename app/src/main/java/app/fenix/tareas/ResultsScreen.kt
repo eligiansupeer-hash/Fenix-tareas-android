@@ -25,6 +25,7 @@ fun ResultsScreen() {
     val executions by dao.observeExecutions().collectAsState(initial = emptyList())
     var query by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("Todas") }
+    var confirmClear by remember { mutableStateOf(false) }
     val statuses = listOf("Todas", "Completada", "Error", "Reintentando", "Cancelada", "En ejecución")
     val filtered = executions.filter { execution ->
         val matchesQuery = query.isBlank() ||
@@ -38,7 +39,10 @@ fun ResultsScreen() {
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Historial de ejecuciones", style = MaterialTheme.typography.headlineMedium)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Historial de ejecuciones", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            OutlinedButton(onClick = { confirmClear = true }, enabled = executions.isNotEmpty()) { Text("Borrar todo") }
+        }
         Text("Cada ejecución conserva su propio estado, duración, intentos y resultado en este dispositivo.", style = MaterialTheme.typography.bodySmall)
         OutlinedTextField(
             value = query,
@@ -70,6 +74,20 @@ fun ResultsScreen() {
                 }
             }
         }
+    }
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Borrar todo el historial") },
+            text = { Text("Se eliminarán los registros de ejecución y sus informes guardados. Las definiciones de tareas no se borrarán.") },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch { dao.clearExecutions() }
+                    confirmClear = false
+                }) { Text("Borrar historial") }
+            },
+            dismissButton = { OutlinedButton(onClick = { confirmClear = false }) { Text("Cancelar") } }
+        )
     }
 }
 
