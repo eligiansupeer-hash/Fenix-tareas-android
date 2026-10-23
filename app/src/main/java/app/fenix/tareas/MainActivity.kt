@@ -68,7 +68,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    TaskHome()
+                    AppShell()
                 }
             }
         }
@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun TaskHome() {
+fun TaskHome() {
     val context = LocalContext.current
     val dao = remember { TaskDatabase.get(context).taskDao() }
     val tasks by dao.observeAll().collectAsState(initial = emptyList())
