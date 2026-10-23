@@ -51,7 +51,7 @@ object WebResearch {
                 pageText = page.text,
                 publishedAt = page.publishedAt
             )
-        }
+        }.distinctBy { canonicalUrlKey(it.url) }
     }
 
     private fun searchDuckDuckGo(query: String): List<SearchHit> {
