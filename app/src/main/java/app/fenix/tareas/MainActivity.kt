@@ -7,6 +7,9 @@ import android.os.Bundle
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -82,6 +85,7 @@ fun TaskHome() {
     val context = LocalContext.current
     val dao = remember { TaskDatabase.get(context).taskDao() }
     val tasks by dao.observeAll().collectAsState(initial = emptyList())
+    val executions by dao.observeExecutions().collectAsState(initial = emptyList())
     var configuredProviders by remember { mutableStateOf(emptyList<app.fenix.tareas.ai.ProviderConfig>()) }
     androidx.compose.runtime.LaunchedEffect(Unit) { configuredProviders = SecureProviderStore(context).loadWithCatalog() }
     val usableProviders = configuredProviders.filter { it.enabled && it.baseUrl.isNotBlank() && it.model.isNotBlank() && (it.noKey || it.apiKeys.any { key -> key.isNotBlank() }) }
@@ -102,6 +106,15 @@ fun TaskHome() {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("Organizá, ejecutá y programá tus tareas.", style = MaterialTheme.typography.bodyLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                SummaryMetric("Activas", tasks.count { it.status in listOf("En cola", "En ejecución", "Reintentando automáticamente") }.toString(), Modifier.weight(1f))
+                SummaryMetric("Completadas", executions.count { it.status == "Completada" }.toString(), Modifier.weight(1f))
+                SummaryMetric("Con error", executions.count { it.status == "Error" }.toString(), Modifier.weight(1f))
+            }
+            tasks.filter { it.enabled && it.scheduleAtMillis != null }
+                .minByOrNull { it.scheduleAtMillis ?: Long.MAX_VALUE }?.let { next ->
+                    Text("Próxima ejecución estimada: ${next.title} · ${formatScheduleTime(next.scheduleAtMillis!!)}", style = MaterialTheme.typography.bodySmall)
+                }
             Text(
                 "${if (usableProviders.isEmpty()) "IA: no hay proveedores listos. Entrá en «IA y API» para configurar uno." else "Proveedores configurados: ${usableProviders.joinToString { it.name }}. Las tareas los usarán al ejecutarse; los fallos se guardan en Resultados."}",
                 style = MaterialTheme.typography.bodySmall,
@@ -177,6 +190,20 @@ fun TaskHome() {
     }
 }
 
+
+@Composable
+private fun SummaryMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(modifier) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(value, style = MaterialTheme.typography.titleLarge)
+            Text(label, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+private fun formatScheduleTime(millis: Long): String =
+    SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(millis))
+
 @Composable
 private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit, onCancel: () -> Unit, onDelete: () -> Unit) {
     Card(
@@ -187,6 +214,9 @@ private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit
             Text(task.title, style = MaterialTheme.typography.titleMedium)
             Text(task.instructions, style = MaterialTheme.typography.bodyMedium)
             Text("Estado: ${task.status}", style = MaterialTheme.typography.labelMedium)
+            if (task.enabled && task.scheduleAtMillis != null) {
+                Text("Próxima ejecución: ${formatScheduleTime(task.scheduleAtMillis)}", style = MaterialTheme.typography.bodySmall)
+            }
             task.lastResult?.let { Text("Último resultado: $it", style = MaterialTheme.typography.bodySmall) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onRun) {
