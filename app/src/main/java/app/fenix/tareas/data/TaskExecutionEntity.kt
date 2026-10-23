@@ -21,5 +21,7 @@ data class TaskExecutionEntity(
     val provider: String? = null,
     val result: String? = null,
     val error: String? = null,
-    @ColumnInfo(defaultValue = "0") val sourceCount: Int = 0
+    @ColumnInfo(defaultValue = "0") val sourceCount: Int = 0,
+    @ColumnInfo(defaultValue = "0") val completedStepCount: Int = 0,
+    @ColumnInfo(defaultValue = "'[]'") val workflowProgress: String = "[]"
 )
