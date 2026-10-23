@@ -125,3 +125,23 @@ Lista mínima manual:
 9. Validación integral en dispositivo.
 
 No se considera una fase terminada solo por compilar: cada fase debe satisfacer sus criterios de salida y documentar cualquier limitación no resuelta.
+
+
+## Estado de implementación (23 de octubre de 2026)
+
+Implementado en la rama `feature/reliable-task-engine`, pendiente de la validación final de CI y pruebas en dispositivo:
+
+- Seguridad web: redirecciones manuales limitadas, validación repetida de URL y comprobaciones DNS defensivas contra destinos locales/privados; pruebas unitarias de rangos especiales.
+- Motor de ejecución: historial por ejecución, actualizaciones Room transaccionales, estados persistentes, reintentos, cancelación y notificaciones con acción de reintento.
+- Historial local: búsqueda, filtros, compartir, borrado individual/global y retención configurable (sin límite, 30 o 90 días), incluyendo la eliminación de la copia del último resultado guardada en la tarea.
+- Evidencia: fuentes numeradas, URL final validada, fecha de publicación cuando la página la expone y marca de consulta; las limitaciones de lectura permanecen visibles.
+- Proveedores: adaptadores declarados por protocolo, prueba de conexión explícita, registro local de éxito/latencia y enfriamiento temporal después de fallos repetidos. No se afirma soporte de tool-calling o JSON estructurado.
+- Flujos encadenados: hasta diez pasos, transferencia del resultado previo al paso siguiente y checkpoints persistidos para reanudar un reintento.
+
+Pendiente antes de declarar la entrega completa:
+
+- Validar el commit más reciente con CI verde y revisar cualquier fallo hasta corregirlo.
+- Instalar y probar en Android físico: migraciones Room desde versiones anteriores, notificaciones, acción de reintento, cancelación real, modo ahorro de batería, reinicio y cambio de zona horaria.
+- Probar de forma controlada redirecciones web inseguras y contenido que intente inyectar instrucciones.
+- Revisar límites de memoria, tamaño de informes y comportamiento ante interrupciones durante cada paso del flujo.
+- La ejecución de flujos por ahora encadena investigación y generación de texto; no ejecuta acciones externas sensibles ni comandos del sistema.
