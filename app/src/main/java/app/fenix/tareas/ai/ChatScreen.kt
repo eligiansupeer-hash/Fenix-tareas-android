@@ -137,7 +137,7 @@ fun ChatScreen() {
                         input = prompt
                         error = e.message ?: "No se pudo completar la solicitud."
                     } finally { busy = false }
-                
+        }
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
