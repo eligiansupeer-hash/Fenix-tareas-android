@@ -58,7 +58,11 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                 "últim", "ultim", "hoy", "compar", "verific", "contrast", "estado del arte",
                 "relevá", "releva", "antecedentes", "evidencia"
             ).any { lowerInstruction.contains(it) }
-            val hits = if (searchRequested) runCatching { WebResearch.search(instruction) }.getOrDefault(emptyList()) else emptyList()
+            val hits = if (searchRequested) {
+                try { WebResearch.search(instruction) }
+                catch (e: CancellationException) { throw e }
+                catch (_: Exception) { emptyList() }
+            } else emptyList()
             val prompt = if (searchRequested) {
                 val evidence = if (hits.isEmpty()) {
                     "La búsqueda web no devolvió resultados verificables. No inventes fuentes ni presentes información como recién comprobada; explicá la limitación y separá conocimiento general de datos no verificados."
