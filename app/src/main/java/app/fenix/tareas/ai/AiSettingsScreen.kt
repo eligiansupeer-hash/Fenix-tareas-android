@@ -3,6 +3,8 @@ package app.fenix.tareas.ai
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
@@ -28,11 +30,11 @@ fun AiSettingsScreen() {
 
     LaunchedEffect(Unit) { providers = store.loadWithCatalog() }
     val current = providers.getOrNull(selected)
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Proveedores de IA", style = MaterialTheme.typography.headlineMedium)
         Text("Las claves se cifran localmente con Android Keystore. No se suben a Fénix. El catálogo nuevo se incorpora sin borrar tus ajustes. Las URLs base y los enlaces para obtener claves se pueden editar.", style = MaterialTheme.typography.bodySmall)
         Text("Se permiten hasta 10 credenciales por proveedor y se intenta el siguiente proveedor/clave cuando una llamada falla.")
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.fillMaxWidth().height(160.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(providers) { index, provider ->
                 OutlinedButton(onClick = { selected = index }, modifier = Modifier.fillMaxWidth()) {
                     Text((if (index == selected) "● " else "") + provider.name + if (provider.noKey) " · sin clave (experimental)" else " · ${provider.apiKeys.count { it.isNotBlank() }} claves")
