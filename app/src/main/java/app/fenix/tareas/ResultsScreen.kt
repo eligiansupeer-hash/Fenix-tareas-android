@@ -32,7 +32,7 @@ fun ResultsScreen() {
 
     LaunchedEffect(retentionDays) {
         if (retentionDays > 0) {
-            dao.deleteExecutionsBefore(System.currentTimeMillis() - retentionDays * 24L * 60L * 60L * 1000L)
+            dao.pruneHistoryBefore(System.currentTimeMillis() - retentionDays * 24L * 60L * 60L * 1000L)
         }
     }
     val statuses = listOf("Todas", "Completada", "Error", "Reintentando", "Cancelada", "En ejecución")
@@ -104,7 +104,7 @@ fun ResultsScreen() {
                     ExecutionCard(
                         execution = execution,
                         onShare = { shareExecution(context, execution) },
-                        onDelete = { scope.launch { dao.deleteExecution(execution.executionId) } }
+                        onDelete = { scope.launch { dao.deleteExecutionAndClearLatestResult(execution) } }
                     )
                 }
             }
@@ -117,7 +117,7 @@ fun ResultsScreen() {
             text = { Text("Se eliminarán los registros de ejecución y sus informes guardados. Las definiciones de tareas no se borrarán.") },
             confirmButton = {
                 Button(onClick = {
-                    scope.launch { dao.clearExecutions() }
+                    scope.launch { dao.clearHistoryAndTaskResults() }
                     confirmClear = false
                 }) { Text("Borrar historial") }
             },
