@@ -21,6 +21,9 @@ interface TaskDao {
     @Query("DELETE FROM task_executions WHERE executionId = :executionId")
     suspend fun deleteExecution(executionId: String)
 
+    @Query("DELETE FROM task_executions")
+    suspend fun clearExecutions()
+
     @Query("SELECT * FROM tasks ORDER BY createdAtMillis DESC")
     fun observeAll(): Flow<List<TaskEntity>>
     @Query("SELECT * FROM tasks WHERE id = :id LIMIT 1")
