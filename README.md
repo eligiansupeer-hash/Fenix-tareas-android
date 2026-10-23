@@ -7,11 +7,11 @@ Aplicación Android nativa para conversar con modelos de IA, investigar en la we
 - Chat como pantalla inicial, configuración de proveedores, tareas y bandeja de resultados.
 - Configuración de proveedores compatibles con la API de chat de OpenAI, con hasta diez claves por proveedor y router secuencial ante errores.
 - Cifrado local de la configuración de proveedores con AES-GCM y clave generada en Android Keystore.
-- Catálogo inicial de diez proveedores/espacios configurables. La disponibilidad gratuita y los requisitos de cuenta cambian; verificar las condiciones vigentes del proveedor.
-- Conector sin clave marcado como experimental, sujeto a disponibilidad del servicio.
+- Catálogo configurable con Pollinations y AI Horde públicos sin clave, además de Ollama sin clave para una instancia propia local/remota. Los servicios públicos pueden limitar o cambiar el acceso; Ollama necesita un servidor accesible por red.
+- Los proveedores nuevos se incorporan a instalaciones existentes sin borrar URLs, modelos ni claves que ya estén guardados.
 - Búsqueda web mediante resultados HTML públicos; puede sufrir bloqueos, limitación de solicitudes o cambios en la página.
 - Tareas programadas que llaman a un proveedor de IA y, cuando la instrucción lo pide, intentan recuperar resultados web; las respuestas y errores se guardan en el dispositivo.
-- Skill básica de alarma desde el chat: abre la aplicación de reloj de Android para que el usuario confirme la hora. No crea alarmas silenciosamente.
+- El chat y las tareas reciben la fecha, hora y zona horaria del reloj real del dispositivo. La skill de alarma procesa localmente la hora solicitada, muestra la hora actual y abre la aplicación de reloj para confirmación.
 - Room para persistencia y WorkManager para ejecución diferible.
 
 ## Límites y seguridad
@@ -19,8 +19,8 @@ Aplicación Android nativa para conversar con modelos de IA, investigar en la we
 - No incluir claves API ni credenciales en el repositorio.
 - Las claves se cifran en el almacenamiento local de la app; no se transmiten al backend de Fénix.
 - El router intenta las claves configuradas y luego los proveedores habilitados. No puede evitar que un proveedor suspenda una cuenta o cambie su cuota.
-- Los endpoints y modelos editables deben corresponder a una API compatible con `/chat/completions`. No todos los proveedores implementan el mismo formato.
-- El proveedor sin clave es experimental y puede dejar de estar disponible o exigir autenticación.
+- Los proveedores con clave usan una API compatible con `/v1/chat/completions`; Pollinations y AI Horde tienen adaptadores específicos. Ollama utiliza su endpoint compatible con OpenAI.
+- Pollinations es experimental; AI Horde usa una cola pública y puede demorar o no tener disponible el modelo pedido. Ollama no es un servicio cloud y requiere un servidor ejecutándose.
 - Las alarmas usan la interfaz del reloj del sistema; el usuario debe confirmar. El permiso de alarma exacta declarado no implica por sí solo programación exacta desde Fénix.
 - WorkManager no garantiza ejecución al segundo exacto. Las tareas programadas dependen de las restricciones y políticas de Android.
 - Los resultados web son evidencia preliminar: contrastar las fuentes antes de tomar decisiones importantes.
