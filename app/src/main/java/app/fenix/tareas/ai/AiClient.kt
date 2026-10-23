@@ -12,14 +12,22 @@ import java.net.URL
 data class ChatMessage(val role: String, val content: String)
 
 class AiClient(private val store: SecureProviderStore) {
+    private val providerHealth = ProviderHealthStore(store.appContext)
+
     suspend fun complete(messages: List<ChatMessage>): Pair<String, String> = withContext(Dispatchers.IO) {
-        val providers = store.loadWithCatalog().filter { it.enabled && it.baseUrl.isNotBlank() && it.model.isNotBlank() }
+        val providers = providerHealth.orderProviders(
+            store.loadWithCatalog().filter { it.enabled && it.baseUrl.isNotBlank() && it.model.isNotBlank() }
+        )
         if (providers.isEmpty()) throw IllegalStateException("No hay proveedores utilizables. Abrí «IA y API» y configurá/activá uno; los proveedores sin clave también requieren conexión y modelo.")
         val failures = mutableListOf<String>()
         for (provider in providers) {
             val capabilities = ProviderCapabilities.forProvider(provider)
             val credentials = if (!capabilities.requiresApiKey) listOf("") else provider.apiKeys.filter { it.isNotBlank() }
-            if (credentials.isEmpty()) { failures += "${provider.name}: falta API key"; continue }
+            if (credentials.isEmpty()) {
+                failures += "${provider.name}: falta API key"
+                continue
+            }
+            val providerStartedAt = System.currentTimeMillis()
             for (credential in credentials.take(10)) {
                 try {
                     val response = when (capabilities.protocol) {
@@ -28,17 +36,26 @@ class AiClient(private val store: SecureProviderStore) {
                         ProviderProtocol.OPENAI_CHAT_COMPLETIONS ->
                             callOpenAiCompatible(provider, messages, credential.takeIf { it.isNotBlank() })
                     }
-                    if (response.isNotBlank()) return@withContext response to provider.name
+                    if (response.isNotBlank()) {
+                        providerHealth.recordSuccess(provider.id, System.currentTimeMillis() - providerStartedAt)
+                        return@withContext response to provider.name
+                    }
                     failures += "${provider.name}: respuesta vacía"
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    failures += "${provider.name}: ${e.message ?: e.javaClass.simpleName}"
+                    failures += "${provider.name}: ${sanitizeProviderError(e.message ?: e.javaClass.simpleName)}"
                 }
             }
+            providerHealth.recordFailure(provider.id)
         }
         throw IllegalStateException("Ningún proveedor respondió. " + failures.joinToString("; "))
     }
+
+    private fun sanitizeProviderError(value: String): String = value
+        .replace(Regex("(?i)(https?://)[^/@\\s]+@"), "$1[REDACTED]@")
+        .replace(Regex("(?i)([?&](?:api[_-]?key|key|token|access_token|password)=)[^&\\s]+"), "$1[REDACTED]")
+        .take(500)
 
     private fun callPollinations(provider: ProviderConfig, messages: List<ChatMessage>): String {
         val prompt = messages.joinToString("\n\n") { "${it.role}: ${it.content}" }
@@ -76,7 +93,7 @@ class AiClient(private val store: SecureProviderStore) {
         } finally { connection.disconnect() }
     }
 
-    private fun callAiHorde(provider: ProviderConfig, messages: List<ChatMessage>): String {
+    private suspend fun callAiHorde(provider: ProviderConfig, messages: List<ChatMessage>): String {
         val prompt = messages.joinToString("\n\n") { "${it.role}: ${it.content}" } + "\n\nassistant:"
         val base = provider.baseUrl.trimEnd('/')
         val request = JSONObject().put("prompt", prompt)
@@ -100,7 +117,7 @@ class AiClient(private val store: SecureProviderStore) {
         } finally { start.disconnect() }
 
         repeat(24) {
-            Thread.sleep(1500)
+            delay(1500)
             val poll = (URL("$base/generate/status/$id").openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"; connectTimeout = 8000; readTimeout = 10000
                 setRequestProperty("apikey", "0000000000")
