@@ -1,45 +1,132 @@
 package app.fenix.tareas
 
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.fenix.tareas.data.TaskDatabase
+import app.fenix.tareas.data.TaskExecutionEntity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultsScreen() {
     val context = LocalContext.current
     val dao = remember { TaskDatabase.get(context).taskDao() }
-    val tasks by dao.observeAll().collectAsState(initial = emptyList())
-    val completed = tasks.filter { !it.lastResult.isNullOrBlank() }.sortedByDescending { it.lastRunAtMillis ?: 0L }
+    val scope = rememberCoroutineScope()
+    val executions by dao.observeExecutions().collectAsState(initial = emptyList())
+    var query by remember { mutableStateOf("") }
+    var statusFilter by remember { mutableStateOf("Todas") }
+    val statuses = listOf("Todas", "Completada", "Error", "Reintentando", "Cancelada", "En ejecución")
+    val filtered = executions.filter { execution ->
+        val matchesQuery = query.isBlank() ||
+            execution.taskTitle.contains(query, ignoreCase = true) ||
+            execution.result.orEmpty().contains(query, ignoreCase = true) ||
+            execution.error.orEmpty().contains(query, ignoreCase = true)
+        val matchesStatus = statusFilter == "Todas" ||
+            (statusFilter == "En ejecución" && execution.status in listOf("En ejecución", "Pendiente", "En cola")) ||
+            execution.status == statusFilter
+        matchesQuery && matchesStatus
+    }
+
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Resultados de tareas", style = MaterialTheme.typography.headlineMedium)
-        Text("Las respuestas y errores de cada ejecución se guardan en el dispositivo.", style = MaterialTheme.typography.bodySmall)
-        if (completed.isEmpty()) {
-            Text("Todavía no hay resultados. Ejecutá una tarea desde la sección Tareas.")
+        Text("Historial de ejecuciones", style = MaterialTheme.typography.headlineMedium)
+        Text("Cada ejecución conserva su propio estado, duración, intentos y resultado en este dispositivo.", style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Buscar en tareas e informes") },
+            singleLine = true
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            statuses.take(3).forEach { status ->
+                FilterChip(selected = statusFilter == status, onClick = { statusFilter = status }, label = { Text(status) })
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            statuses.drop(3).forEach { status ->
+                FilterChip(selected = statusFilter == status, onClick = { statusFilter = status }, label = { Text(status) })
+            }
+        }
+        if (filtered.isEmpty()) {
+            Text(if (executions.isEmpty()) "Todavía no hay ejecuciones registradas. Ejecutá una tarea desde Tareas." else "No hay ejecuciones que coincidan con el filtro.")
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(completed, key = { it.id }) { task ->
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(task.title, style = MaterialTheme.typography.titleMedium)
-                            Text("Estado: ${task.status}", style = MaterialTheme.typography.labelMedium)
-                            task.lastRunAtMillis?.let { Text(SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(it)), style = MaterialTheme.typography.bodySmall) }
-                            Text(task.lastResult ?: "")
-                        }
-                    }
+                items(filtered, key = { it.executionId }) { execution ->
+                    ExecutionCard(
+                        execution = execution,
+                        onShare = { shareExecution(context, execution) },
+                        onDelete = { scope.launch { dao.deleteExecution(execution.executionId) } }
+                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ExecutionCard(
+    execution: TaskExecutionEntity,
+    onShare: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(execution.taskTitle, style = MaterialTheme.typography.titleMedium)
+            Text("Estado: ${execution.status}", style = MaterialTheme.typography.labelMedium)
+            Text(
+                "Inicio: ${formatDate(execution.startedAtMillis)}" +
+                    (execution.finishedAtMillis?.let { " · Fin: ${formatDate(it)}" } ?: ""),
+                style = MaterialTheme.typography.bodySmall
+            )
+            execution.durationMillis?.let {
+                Text("Duración: ${formatDuration(it)} · Intentos: ${execution.attemptCount}", style = MaterialTheme.typography.bodySmall)
+            } ?: Text("Intento actual: ${execution.attemptCount}", style = MaterialTheme.typography.bodySmall)
+            execution.provider?.let { Text("Proveedor: $it", style = MaterialTheme.typography.bodySmall) }
+            if (execution.sourceCount > 0) Text("Fuentes recuperadas: ${execution.sourceCount}", style = MaterialTheme.typography.bodySmall)
+            execution.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            execution.result?.let { Text(it) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onShare, enabled = !execution.result.isNullOrBlank() || !execution.error.isNullOrBlank()) {
+                    Text("Compartir")
+                }
+                OutlinedButton(onClick = onDelete) { Text("Eliminar registro") }
+            }
+        }
+    }
+}
+
+private fun shareExecution(context: android.content.Context, execution: TaskExecutionEntity) {
+    val content = buildString {
+        appendLine("Fénix Tareas — ${execution.taskTitle}")
+        appendLine("Estado: ${execution.status}")
+        appendLine("Inicio: ${formatDate(execution.startedAtMillis)}")
+        execution.durationMillis?.let { appendLine("Duración: ${formatDuration(it)}") }
+        execution.provider?.let { appendLine("Proveedor: $it") }
+        execution.error?.let { appendLine("\nError: $it") }
+        execution.result?.let { appendLine("\n$it") }
+    }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, "Fénix Tareas: ${execution.taskTitle}")
+        putExtra(Intent.EXTRA_TEXT, content)
+    }
+    context.startActivity(Intent.createChooser(intent, "Compartir resultado"))
+}
+
+private fun formatDate(millis: Long): String =
+    SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date(millis))
+
+private fun formatDuration(millis: Long): String {
+    val seconds = (millis / 1000).coerceAtLeast(0L)
+    return if (seconds < 60) "${seconds}s" else "${seconds / 60}m ${seconds % 60}s"
 }
