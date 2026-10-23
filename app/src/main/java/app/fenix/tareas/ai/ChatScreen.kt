@@ -10,6 +10,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -50,6 +52,7 @@ private fun applyProviderUrlChange(store: SecureProviderStore, prompt: String): 
 @Composable
 fun ChatScreen() {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val store = remember { SecureProviderStore(context) }
     val client = remember { AiClient(store) }
     val scope = rememberCoroutineScope()
@@ -57,6 +60,8 @@ fun ChatScreen() {
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var failedPrompt by remember { mutableStateOf<String?>(null) }
+    var awaitingAlarmTime by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { store.loadWithCatalog() }
 
@@ -79,6 +84,7 @@ fun ChatScreen() {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(if (message.role == "user") "Vos" else "Fénix IA", style = MaterialTheme.typography.labelMedium)
                         Text(message.text)
+                        TextButton(onClick = { clipboard.setText(AnnotatedString(message.text)) }) { Text("Copiar") }
                         message.provider?.let { Text("Proveedor: $it", style = MaterialTheme.typography.labelSmall) }
                     }
                 }
