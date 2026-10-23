@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** Encrypts provider configuration, including API keys, with an Android Keystore AES-GCM key. */
 class SecureProviderStore(context: Context) {
-    private val appContext = context.applicationContext
+    internal val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences("fenix_ai_secure", Context.MODE_PRIVATE)
     private val alias = "fenix_provider_config_v1"
 
