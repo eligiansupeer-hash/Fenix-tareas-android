@@ -13,6 +13,7 @@ import app.fenix.tareas.ai.ChatMessage
 import app.fenix.tareas.ai.SecureProviderStore
 import app.fenix.tareas.ai.WebResearch
 import app.fenix.tareas.data.TaskDatabase
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -57,6 +58,8 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                 TaskScheduler.enqueue(applicationContext, task.id, TaskScheduler.nextWeeklyRun(task, now))
             }
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val errorText = "No se pudo completar la tarea: ${e.message ?: e.javaClass.simpleName}"
             val message = errorText.lowercase()
