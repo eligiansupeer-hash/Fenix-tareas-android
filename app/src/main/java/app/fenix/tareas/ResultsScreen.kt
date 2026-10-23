@@ -25,6 +25,8 @@ fun ResultsScreen() {
     val executions by dao.observeExecutions().collectAsState(initial = emptyList())
     var query by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf("Todas") }
+    var dateFilter by remember { mutableStateOf("Todo el tiempo") }
+    var showDateMenu by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var showRetentionMenu by remember { mutableStateOf(false) }
     val preferences = remember { context.getSharedPreferences("fenix_results_preferences", android.content.Context.MODE_PRIVATE) }
@@ -36,7 +38,14 @@ fun ResultsScreen() {
         }
     }
     val statuses = listOf("Todas", "Completada", "Error", "Reintentando", "Cancelada", "En ejecución")
+    val cutoffMillis = when (dateFilter) {
+        "Últimas 24 horas" -> System.currentTimeMillis() - 24L * 60L * 60L * 1000L
+        "Últimos 7 días" -> System.currentTimeMillis() - 7L * 24L * 60L * 60L * 1000L
+        "Últimos 30 días" -> System.currentTimeMillis() - 30L * 24L * 60L * 60L * 1000L
+        else -> Long.MIN_VALUE
+    }
     val filtered = executions.filter { execution ->
+        val matchesDate = execution.startedAtMillis >= cutoffMillis
         val matchesQuery = query.isBlank() ||
             execution.taskTitle.contains(query, ignoreCase = true) ||
             execution.result.orEmpty().contains(query, ignoreCase = true) ||
@@ -44,7 +53,7 @@ fun ResultsScreen() {
         val matchesStatus = statusFilter == "Todas" ||
             (statusFilter == "En ejecución" && execution.status in listOf("En ejecución", "Pendiente", "En cola")) ||
             execution.status == statusFilter
-        matchesQuery && matchesStatus
+        matchesDate && matchesQuery && matchesStatus
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -78,6 +87,20 @@ fun ResultsScreen() {
                 }
             }
             Text("Los registros antiguos se borran automáticamente según esta elección.", style = MaterialTheme.typography.bodySmall)
+        }
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Fecha:")
+            Box {
+                OutlinedButton(onClick = { showDateMenu = true }) { Text(dateFilter) }
+                DropdownMenu(expanded = showDateMenu, onDismissRequest = { showDateMenu = false }) {
+                    listOf("Todo el tiempo", "Últimas 24 horas", "Últimos 7 días", "Últimos 30 días").forEach { option ->
+                        DropdownMenuItem(text = { Text(option) }, onClick = {
+                            dateFilter = option
+                            showDateMenu = false
+                        })
+                    }
+                }
+            }
         }
         OutlinedTextField(
             value = query,
