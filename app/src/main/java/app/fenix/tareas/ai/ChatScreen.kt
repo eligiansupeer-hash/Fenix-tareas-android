@@ -63,7 +63,7 @@ fun ChatScreen() {
                         val lower = prompt.lowercase()
                         val answer: Pair<String, String>
                         if (lower.contains("alarma") || lower.contains("despertador")) {
-                            val match = Regex("""(?:a las|para las|las)\\s+(\\d{1,2})(?::(\\d{2}))?""").find(lower)
+                            val match = Regex("""(?:a las|para las|las)\s+(\d{1,2})(?::(\d{2}))?""").find(lower)
                             if (match == null) {
                                 answer = "Decime la hora, por ejemplo: “poné una alarma a las 7:30”." to "Skill de alarmas"
                             } else {
