@@ -107,7 +107,7 @@ fun TaskHome() {
         ) {
             Text("Organizá, ejecutá y programá tus tareas.", style = MaterialTheme.typography.bodyLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                SummaryMetric("Activas", tasks.count { it.status in listOf("En cola", "En ejecución", "Reintentando automáticamente") }.toString(), Modifier.weight(1f))
+                SummaryMetric("Activas", tasks.count { (it.status in listOf("En cola", "En ejecución") || it.status.startsWith("Reintentando")) }.toString(), Modifier.weight(1f))
                 SummaryMetric("Completadas", executions.count { it.status == "Completada" }.toString(), Modifier.weight(1f))
                 SummaryMetric("Con error", executions.count { it.status == "Error" }.toString(), Modifier.weight(1f))
             }
