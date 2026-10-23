@@ -2,37 +2,24 @@ package app.fenix.tareas.ai
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.net.HttpURLConnection
+import org.jsoup.Jsoup
 import java.net.URLEncoder
-import java.net.URL
 
 data class SearchHit(val title: String, val url: String, val snippet: String)
 
 object WebResearch {
+    /** Public HTML search endpoint; results may be rate-limited and must be treated as untrusted content. */
     suspend fun search(query: String): List<SearchHit> = withContext(Dispatchers.IO) {
         val encoded = URLEncoder.encode(query, "UTF-8")
-        val connection = (URL("https://api.duckduckgo.com/?q=$encoded&format=json&no_html=1&skip_disambig=1").openConnection() as HttpURLConnection)
-        try {
-            connection.connectTimeout = 10000; connection.readTimeout = 15000
-            connection.setRequestProperty("User-Agent", "FenixTareasAndroid/0.2")
-            val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-            val hits = mutableListOf<SearchHit>()
-            fun collect(o: JSONObject) {
-                val text = o.optString("Text")
-                val first = o.optString("FirstURL")
-                if (text.isNotBlank() && first.startsWith("http")) hits += SearchHit(text.substringBefore(" - "), first, text)
-                val topics = o.optJSONArray("Topics") ?: return
-                for (i in 0 until topics.length()) {
-                    val item = topics.optJSONObject(i) ?: continue
-                    if (item.has("Topics")) collect(item) else {
-                        val t = item.optString("Text"); val u = item.optString("FirstURL")
-                        if (t.isNotBlank() && u.startsWith("http")) hits += SearchHit(t.substringBefore(" - "), u, t)
-                    }
-                }
-            }
-            collect(json)
-            hits.distinctBy { it.url }.take(8)
-        } finally { connection.disconnect() }
+        val document = Jsoup.connect("https://html.duckduckgo.com/html/?q=$encoded")
+            .userAgent("Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36")
+            .timeout(15000).get()
+        document.select(".result").mapNotNull { result ->
+            val link = result.selectFirst(".result__a") ?: return@mapNotNull null
+            val href = link.absUrl("href").ifBlank { link.attr("href") }
+            val title = link.text().trim()
+            val snippet = result.selectFirst(".result__snippet")?.text()?.trim().orEmpty()
+            if (title.isBlank() || !href.startsWith("http")) null else SearchHit(title, href, snippet)
+        }.distinctBy { it.url }.take(8)
     }
 }
