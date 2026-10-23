@@ -51,7 +51,7 @@ fun AiSettingsScreen() {
                     } catch (_: Exception) {
                         status = "No se pudo abrir el enlace. Copiá la URL y abrila en el navegador."
                     }
-                }, modifier = Modifier.fillMaxWidth()) { Text("Obtener API key / abrir portal oficial") }
+                }, modifier = Modifier.fillMaxWidth()) { Text(if (provider.noKey) "Abrir portal oficial del proveedor" else "Obtener API key / abrir portal oficial") }
             }
             OutlinedTextField(value = provider.model, onValueChange = { v -> providers = providers.toMutableList().also { it[selected] = provider.copy(model = v) } }, label = { Text("Modelo") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Text(ProviderCapabilities.forProvider(provider).explanation, style = MaterialTheme.typography.bodySmall)
