@@ -17,18 +17,16 @@ class AiClient(private val store: SecureProviderStore) {
         if (providers.isEmpty()) throw IllegalStateException("No hay proveedores utilizables. Abrí «IA y API» y configurá/activá uno; los proveedores sin clave también requieren conexión y modelo.")
         val failures = mutableListOf<String>()
         for (provider in providers) {
-            val credentials = if (provider.noKey) listOf("") else provider.apiKeys.filter { it.isNotBlank() }
+            val capabilities = ProviderCapabilities.forProvider(provider)
+            val credentials = if (!capabilities.requiresApiKey) listOf("") else provider.apiKeys.filter { it.isNotBlank() }
             if (credentials.isEmpty()) { failures += "${provider.name}: falta API key"; continue }
             for (credential in credentials.take(10)) {
                 try {
-                    val response = when (provider.id) {
-                        "ai-horde" -> callAiHorde(provider, messages)
-                        "ollama" -> callOpenAiCompatible(provider, messages, null)
-                        "pollinations" -> callPollinations(provider, messages)
-                        else -> {
-                            if (provider.noKey) callPollinations(provider, messages)
-                            else callOpenAiCompatible(provider, messages, credential)
-                        }
+                    val response = when (capabilities.protocol) {
+                        ProviderProtocol.AI_HORDE_ASYNC -> callAiHorde(provider, messages)
+                        ProviderProtocol.POLLINATIONS_TEXT -> callPollinations(provider, messages)
+                        ProviderProtocol.OPENAI_CHAT_COMPLETIONS ->
+                            callOpenAiCompatible(provider, messages, credential.takeIf { it.isNotBlank() })
                     }
                     if (response.isNotBlank()) return@withContext response to provider.name
                     failures += "${provider.name}: respuesta vacía"
