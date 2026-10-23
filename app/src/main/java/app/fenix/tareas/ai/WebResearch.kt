@@ -2,8 +2,12 @@ package app.fenix.tareas.ai
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jsoup.Connection
 import org.jsoup.Jsoup
 import org.json.JSONArray
+import java.io.IOException
+import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -24,6 +28,9 @@ object WebResearch {
     private const val PAGE_TIMEOUT_MS = 8_000
     private const val MAX_PAGES_TO_READ = 3
     private const val MAX_CHARS_PER_PAGE = 4_500
+    private const val MAX_REDIRECTS = 5
+    private const val MAX_PAGE_BYTES = 1_500_000
+    private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36"
 
     /**
      * Searches the public web, then attempts to read up to three result pages.
@@ -42,7 +49,7 @@ object WebResearch {
     private fun searchDuckDuckGo(query: String): List<SearchHit> {
         val encoded = URLEncoder.encode(query, "UTF-8")
         val document = Jsoup.connect("https://html.duckduckgo.com/html/?q=$encoded")
-            .userAgent("Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36")
+            .userAgent(USER_AGENT)
             .timeout(SEARCH_TIMEOUT_MS)
             .maxBodySize(1_000_000)
             .get()
@@ -76,14 +83,39 @@ object WebResearch {
         }
     }
 
+    /**
+     * Manually follows a bounded number of redirects and revalidates every destination.
+     * DNS results are checked before each request to reject hosts resolving to local/private
+     * addresses. This is defense-in-depth; it is not a substitute for network-layer egress rules.
+     */
     private fun readPublicPage(rawUrl: String): String {
-        if (!isPublicWebUrl(rawUrl)) return ""
-        val document = Jsoup.connect(rawUrl)
-            .userAgent("Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36")
-            .timeout(PAGE_TIMEOUT_MS)
-            .maxBodySize(1_500_000)
-            .followRedirects(true)
-            .get()
+        var currentUrl = rawUrl
+        var response: Connection.Response? = null
+        repeat(MAX_REDIRECTS + 1) { redirectCount ->
+            if (!isPublicWebUrl(currentUrl, resolveDns = true)) {
+                throw IOException("Se rechazó una URL no pública o un destino de redirección inseguro.")
+            }
+            val nextResponse = Jsoup.connect(currentUrl)
+                .userAgent(USER_AGENT)
+                .timeout(PAGE_TIMEOUT_MS)
+                .maxBodySize(MAX_PAGE_BYTES)
+                .followRedirects(false)
+                .ignoreHttpErrors(true)
+                .execute()
+            val status = nextResponse.statusCode()
+            if (status in 300..399) {
+                if (redirectCount >= MAX_REDIRECTS) throw IOException("Se excedió el límite de redirecciones.")
+                val location = nextResponse.header("Location")?.trim().orEmpty()
+                if (location.isBlank()) throw IOException("Redirección sin destino.")
+                currentUrl = URI(currentUrl).resolve(location).toString()
+                return@repeat
+            }
+            if (status !in 200..299) throw IOException("La página respondió HTTP $status.")
+            response = nextResponse
+            return@repeat
+        }
+        val finalResponse = response ?: throw IOException("No se pudo completar la lectura de la página.")
+        val document = finalResponse.parse()
         document.select("script,style,nav,footer,header,aside,form,button,iframe,noscript,svg,canvas").remove()
         val main = document.selectFirst("article") ?: document.selectFirst("main") ?: document.body()
         return main?.text().orEmpty()
@@ -103,22 +135,59 @@ object WebResearch {
         } catch (_: Exception) { rawUrl }
     }
 
-    private fun isPublicWebUrl(raw: String): Boolean {
+    /** Internal for deterministic unit tests; DNS resolution is enabled only for actual fetches. */
+    internal fun isPublicWebUrl(raw: String, resolveDns: Boolean = false): Boolean {
         return try {
             val uri = URI(raw)
             val scheme = uri.scheme?.lowercase(Locale.ROOT)
-            val host = uri.host?.lowercase(Locale.ROOT)?.removeSuffix(".") ?: return false
+            val host = uri.host?.lowercase(Locale.ROOT)?.removePrefix("[")?.removeSuffix("]")?.removeSuffix(".")
+                ?: return false
             if (scheme != "http" && scheme != "https") return false
-            if (host == "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false
-            if (host == "0.0.0.0" || host == "::1" || host.startsWith("127.") || host.startsWith("10.") || host.startsWith("192.168.")) return false
-            if (host.startsWith("169.254.")) return false
-            val parts = host.split(".")
-            if (parts.size == 4 && parts.all { it.toIntOrNull() != null }) {
-                val octets = parts.map { it.toInt() }
-                if (octets.any { it !in 0..255 }) return false
-                if (octets[0] == 172 && octets[1] in 16..31) return false
+            if (uri.rawUserInfo != null) return false
+            if (host.isBlank() || host == "localhost" || host.endsWith(".localhost") ||
+                host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".test") ||
+                host.endsWith(".invalid" ) || host.endsWith(".example")) return false
+            if (host.equals("metadata.google.internal", ignoreCase = true)) return false
+
+            val literalAddress = parseIpLiteral(host)
+            if (literalAddress != null && !isGloballyRoutable(literalAddress)) return false
+            if (resolveDns && literalAddress == null) {
+                val addresses = InetAddress.getAllByName(host)
+                if (addresses.isEmpty() || addresses.any { !isGloballyRoutable(it) }) return false
             }
             true
         } catch (_: Exception) { false }
+    }
+
+    private fun parseIpLiteral(host: String): InetAddress? {
+        val looksLikeIpv4 = host.matches(Regex("[0-9.]+"))
+        val looksLikeIpv6 = host.contains(":")
+        if (!looksLikeIpv4 && !looksLikeIpv6) return null
+        return try {
+            if (looksLikeIpv4) {
+                val parts = host.split(".")
+                if (parts.size != 4 || parts.any { it.toIntOrNull() !in 0..255 }) null
+                else InetAddress.getByName(host)
+            } else InetAddress.getByName(host)
+        } catch (_: Exception) { null }
+    }
+
+    private fun isGloballyRoutable(address: InetAddress): Boolean {
+        if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
+            address.isSiteLocalAddress || address.isMulticastAddress) return false
+        if (address is Inet4Address) {
+            val bytes = address.address.map { it.toInt() and 0xff }
+            val a = bytes[0]
+            val b = bytes[1]
+            val c = bytes[2]
+            if (a == 0 || a == 10 || a == 127 || a >= 224) return false
+            if (a == 100 && b in 64..127) return false // shared address space (RFC 6598)
+            if (a == 169 && b == 254) return false
+            if (a == 172 && b in 16..31) return false
+            if (a == 192 && (b == 168 || b == 0 && c == 0 || b == 0 && c == 2)) return false
+            if (a == 198 && (b == 18 || b == 19 || b == 51 && c == 100)) return false
+            if (a == 203 && b == 0 && c == 113) return false
+        }
+        return true
     }
 }
