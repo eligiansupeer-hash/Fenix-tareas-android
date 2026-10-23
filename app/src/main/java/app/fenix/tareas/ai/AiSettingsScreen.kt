@@ -1,5 +1,7 @@
 package app.fenix.tareas.ai
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -28,7 +30,7 @@ fun AiSettingsScreen() {
     val current = providers.getOrNull(selected)
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Proveedores de IA", style = MaterialTheme.typography.headlineMedium)
-        Text("Las claves se cifran localmente con Android Keystore. No se suben a Fénix. El catálogo nuevo se incorpora sin borrar tus ajustes.", style = MaterialTheme.typography.bodySmall)
+        Text("Las claves se cifran localmente con Android Keystore. No se suben a Fénix. El catálogo nuevo se incorpora sin borrar tus ajustes. Las URLs base y los enlaces para obtener claves se pueden editar.", style = MaterialTheme.typography.bodySmall)
         Text("Se permiten hasta 10 credenciales por proveedor y se intenta el siguiente proveedor/clave cuando una llamada falla.")
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(providers) { index, provider ->
@@ -40,9 +42,20 @@ fun AiSettingsScreen() {
         current?.let { provider ->
             Text(provider.name, style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(value = provider.name, onValueChange = { v -> providers = providers.toMutableList().also { it[selected] = provider.copy(name = v) } }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(value = provider.baseUrl, onValueChange = { v -> providers = providers.toMutableList().also { it[selected] = provider.copy(baseUrl = v) } }, label = { Text("URL base compatible con OpenAI") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = provider.baseUrl, onValueChange = { v -> providers = providers.toMutableList().also { it[selected] = provider.copy(baseUrl = v) } }, label = { Text("URL base de la API (editable)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = provider.apiKeyUrl, onValueChange = { v -> providers = providers.toMutableList().also { it[selected] = provider.copy(apiKeyUrl = v) } }, label = { Text("Enlace para obtener la API key (editable)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            if (provider.apiKeyUrl.startsWith("https://")) {
+                OutlinedButton(onClick = {
+                    try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(provider.apiKeyUrl)))
+                    } catch (_: Exception) {
+                        status = "No se pudo abrir el enlace. Copiá la URL y abrila en el navegador."
+                    }
+                }, modifier = Modifier.fillMaxWidth()) { Text("Obtener API key / abrir portal oficial") }
+            }
             OutlinedTextField(value = provider.model, onValueChange = { v -> providers = providers.toMutableList().also { it[selected] = provider.copy(model = v) } }, label = { Text("Modelo") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Text(ProviderCapabilities.forProvider(provider).explanation, style = MaterialTheme.typography.bodySmall)
+            Text("También podés pedir en el chat: “cambiá la URL de Groq a https://…”. Fénix aplicará únicamente cambios de URL explícitos que indiques.", style = MaterialTheme.typography.bodySmall)
             Text("El test envía un mensaje breve al proveedor seleccionado y puede consumir una pequeña cantidad de cuota.")
             if (!provider.noKey) {
                 provider.apiKeys.forEachIndexed { keyIndex, key ->
