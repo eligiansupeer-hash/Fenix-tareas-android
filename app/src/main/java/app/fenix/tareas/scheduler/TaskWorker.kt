@@ -1,6 +1,8 @@
 package app.fenix.tareas.scheduler
 
 import android.app.NotificationChannel
+import android.app.PendingIntent
+import android.content.Intent
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
@@ -103,7 +105,7 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                     sourceCount = hits.size
                 )
             )
-            showNotification(task.title, "La tarea terminó. Revisá el resultado en Fénix Tareas.")
+            showNotification(task.title, "La tarea terminó. Revisá el resultado en Fénix Tareas.", task.id)
             if (nextRunAt != null) {
                 TaskScheduler.enqueue(
                     applicationContext,
@@ -156,7 +158,7 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                         error = errorText
                     )
                 )
-                showNotification(task.title, "La tarea falló. Revisá el detalle en Resultados.")
+                showNotification(task.title, "La tarea falló. Revisá el detalle en Resultados.", task.id, allowRetry = true)
                 Result.failure()
             }
         }
@@ -169,16 +171,42 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             .take(1200)
     }
 
-    private fun showNotification(title: String, body: String) {
+    private fun showNotification(title: String, body: String, taskId: Long, allowRetry: Boolean = false) {
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Tareas de Fénix", NotificationManager.IMPORTANCE_DEFAULT))
         }
-        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+        val openResults = Intent(applicationContext, app.fenix.tareas.MainActivity::class.java)
+            .putExtra(app.fenix.tareas.MainActivity.EXTRA_OPEN_RESULTS, true)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val contentIntent = PendingIntent.getActivity(
+            applicationContext,
+            taskId.toInt(),
+            openResults,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle(title).setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body)).setAutoCancel(true).build()
-        try { NotificationManagerCompat.from(applicationContext).notify(title.hashCode(), notification) }
+            .setContentTitle(title)
+            .setContentText(body)
+            .setContentIntent(contentIntent)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setAutoCancel(true)
+        if (allowRetry) {
+            val retryIntent = Intent(applicationContext, TaskActionReceiver::class.java)
+                .setAction(TaskActionReceiver.ACTION_RETRY_TASK)
+                .putExtra(KEY_TASK_ID, taskId)
+            val retryPendingIntent = PendingIntent.getBroadcast(
+                applicationContext,
+                (taskId xor 0x5f3759dfL).toInt(),
+                retryIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(
+                NotificationCompat.Action.Builder(android.R.drawable.ic_media_play, "Reintentar", retryPendingIntent).build()
+            )
+        }
+        try { NotificationManagerCompat.from(applicationContext).notify(("fenix-task-$taskId").hashCode(), builder.build()) }
         catch (_: SecurityException) { }
     }
 
