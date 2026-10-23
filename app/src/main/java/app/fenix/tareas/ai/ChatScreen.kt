@@ -44,7 +44,7 @@ private fun applyProviderUrlChange(store: SecureProviderStore, prompt: String): 
 
     val updated = provider.copy(baseUrl = rawUrl.trimEnd('/'))
     store.save(providers.map { if (it.id == provider.id) updated else it })
-    return "Actualicé la URL base de \${provider.name} a \${updated.baseUrl}. El cambio quedó guardado localmente; probá la conexión en «IA y API»." to "Configuración local"
+    return "Actualicé la URL base de ${provider.name} a ${updated.baseUrl}. El cambio quedó guardado localmente; probá la conexión en «IA y API»." to "Configuración local"
 }
 
 @Composable
