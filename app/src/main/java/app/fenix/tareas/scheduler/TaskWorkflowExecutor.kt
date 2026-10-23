@@ -35,6 +35,8 @@ class TaskWorkflowExecutor(
         val steps = WorkflowStepParser.parse(task.workflowSteps)
         if (steps.isEmpty()) throw IllegalArgumentException("El flujo no contiene pasos válidos.")
         if (steps.size > MAX_STEPS) throw IllegalArgumentException("Un flujo puede contener como máximo $MAX_STEPS pasos.")
+        if (task.instructions.length > MAX_INSTRUCTIONS_CHARS) throw IllegalArgumentException("El objetivo general supera el límite de $MAX_INSTRUCTIONS_CHARS caracteres.")
+        if (steps.any { it.length > MAX_STEP_CHARS }) throw IllegalArgumentException("Cada paso debe tener como máximo $MAX_STEP_CHARS caracteres.")
         val reports = restoreProgress(execution.workflowProgress)
         if (reports.size > steps.size) throw IllegalStateException("El progreso guardado no coincide con los pasos actuales.")
         val providers = execution.provider.orEmpty().split(" | ").filter { it.isNotBlank() }.toMutableSet()
@@ -88,7 +90,9 @@ class TaskWorkflowExecutor(
             val sources = if (hits.isEmpty()) "" else "\n\nFuentes consultadas:\n" + hits.mapIndexed { index, hit ->
                 "[${index + 1}] ${hit.title} (${hit.sourceHost}) — publicación: ${hit.publishedAt ?: "no detectada"}; consulta: ${Instant.ofEpochMilli(hit.retrievedAtMillis)} — ${hit.url}"
             }.joinToString("\n")
-            val stepReport = "## Paso ${stepIndex + 1}: $step\nProveedor: $provider\n\n$response$sources"
+            val boundedResponse = response.take(MAX_STEP_OUTPUT_CHARS) +
+                if (response.length > MAX_STEP_OUTPUT_CHARS) "\n\n[Salida truncada por el límite de seguridad de Fénix.]" else ""
+            val stepReport = "## Paso ${stepIndex + 1}: $step\nProveedor: $provider\n\n$boundedResponse$sources"
             reports += stepReport
             report = buildReport(reports, providers)
             dao.saveTaskAndExecution(
@@ -135,6 +139,9 @@ class TaskWorkflowExecutor(
 
     companion object {
         private const val MAX_STEPS = 10
+        private const val MAX_INSTRUCTIONS_CHARS = 4000
+        private const val MAX_STEP_CHARS = 300
+        private const val MAX_STEP_OUTPUT_CHARS = 7000
         private const val MAX_PRIOR_OUTPUT_CHARS = 5000
         private val RESEARCH_TERMS = listOf(
             "investig", "busc", "web", "internet", "fuentes", "noticias", "actualiz",
