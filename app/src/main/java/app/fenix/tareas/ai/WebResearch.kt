@@ -68,7 +68,7 @@ object WebResearch {
         val titles = data.optJSONArray(1) ?: return emptyList()
         val descriptions = data.optJSONArray(2)
         val urls = data.optJSONArray(3)
-        (0 until titles.length()).mapNotNull { index ->
+        return (0 until titles.length()).mapNotNull { index ->
             val title = titles.optString(index).trim()
             val url = urls?.optString(index).orEmpty()
             val snippet = descriptions?.optString(index).orEmpty()
