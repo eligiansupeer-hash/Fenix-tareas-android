@@ -80,8 +80,16 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             }.joinToString("\n")
             val resultText = "Proveedor: $provider\n\n$response$sourceList"
             val finishedAt = System.currentTimeMillis()
-            val nextStatus = if (task.enabled && task.repeatDays.isNotBlank()) "Recurrente: próxima ejecución programada" else "Completada"
-            dao.update(task.copy(status = nextStatus, lastRunAtMillis = startedAt, lastResult = resultText))
+            val shouldRepeat = task.enabled && task.repeatDays.isNotBlank()
+            val nextRunAt = if (shouldRepeat) TaskScheduler.nextWeeklyRun(task, finishedAt) else null
+            val nextStatus = if (shouldRepeat) "Recurrente: próxima ejecución programada" else "Completada"
+            dao.update(task.copy(
+                enabled = shouldRepeat,
+                status = nextStatus,
+                scheduleAtMillis = nextRunAt ?: task.scheduleAtMillis,
+                lastRunAtMillis = startedAt,
+                lastResult = resultText
+            ))
             dao.upsertExecution(execution.copy(
                 status = "Completada",
                 finishedAtMillis = finishedAt,
@@ -92,11 +100,11 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                 sourceCount = hits.size
             ))
             showNotification(task.title, "La tarea terminó. Revisá el resultado en Fénix Tareas.")
-            if (task.enabled && task.repeatDays.isNotBlank()) {
+            if (nextRunAt != null) {
                 TaskScheduler.enqueue(
                     applicationContext,
                     task.id,
-                    TaskScheduler.nextWeeklyRun(task, finishedAt),
+                    nextRunAt,
                     appendAfterCurrent = true
                 )
             }
@@ -132,7 +140,7 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                 ))
                 Result.retry()
             } else {
-                dao.update(task.copy(status = "Error", lastRunAtMillis = startedAt, lastResult = errorText))
+                dao.update(task.copy(enabled = task.enabled && task.repeatDays.isNotBlank(), status = "Error", lastRunAtMillis = startedAt, lastResult = errorText))
                 dao.upsertExecution(execution.copy(
                     status = "Error",
                     finishedAtMillis = finishedAt,
