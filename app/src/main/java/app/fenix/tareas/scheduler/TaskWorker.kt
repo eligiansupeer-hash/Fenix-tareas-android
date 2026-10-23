@@ -18,8 +18,12 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         val task = dao.findById(taskId) ?: return@withContext Result.failure()
         val now = System.currentTimeMillis()
         val resultText = "Ejecución local registrada. La integración web e IA aún no está configurada."
-        dao.update(task.copy(status = "Completada", lastRunAtMillis = now, lastResult = resultText))
+        val nextStatus = if (task.enabled && task.repeatDays.isNotBlank()) "Recurrente: próxima ejecución programada" else "Completada"
+        dao.update(task.copy(status = nextStatus, lastRunAtMillis = now, lastResult = resultText))
         showNotification(task.title, "La tarea terminó. Revisá el resultado en Fénix Tareas.")
+        if (task.enabled && task.repeatDays.isNotBlank()) {
+            TaskScheduler.enqueue(applicationContext, task.id, TaskScheduler.nextWeeklyRun(task, now))
+        }
         Result.success()
     }
     private fun showNotification(title: String, body: String) {
@@ -32,7 +36,7 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             .setContentTitle(title).setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body)).setAutoCancel(true).build()
         try { NotificationManagerCompat.from(applicationContext).notify(title.hashCode(), notification) }
-        catch (_: SecurityException) { /* Notification permission can be denied. */ }
+        catch (_: SecurityException) { }
     }
     companion object {
         const val KEY_TASK_ID = "task_id"
