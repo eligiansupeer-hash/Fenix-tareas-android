@@ -123,14 +123,17 @@ fun ChatScreen() {
                         val urlChange = applyProviderUrlChange(store, prompt)
                         if (urlChange != null) {
                             answer = urlChange
-                        } else if (lower.contains("alarma") || lower.contains("despertador")) {
+                        } else if (lower.contains("alarma") || lower.contains("despertador") || awaitingAlarmTime) {
                             val match = Regex("""(?:a las|para las|las)\s+(\d{1,2})(?::(\d{2}))?""").find(lower)
+                                ?: if (awaitingAlarmTime) Regex("""\b(\d{1,2}):(\d{2})\b""").find(lower) else null
                             if (match == null) {
-                                answer = "Decime la hora, por ejemplo: “poné una alarma a las 7:30”. La hora actual del teléfono es ${DeviceClock.currentTime()}." to "Skill de alarmas"
+                                awaitingAlarmTime = true
+                                answer = "¿A qué hora la querés? Escribí, por ejemplo, 19:45. La hora actual del teléfono es ${DeviceClock.currentTime()}." to "Skill de alarmas"
                             } else {
                                 val hour = match.groupValues[1].toIntOrNull() ?: -1
                                 val minute = match.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }?.toIntOrNull() ?: 0
                                 if (hour !in 0..23 || minute !in 0..59) {
+                                    awaitingAlarmTime = true
                                     answer = "La hora no es válida. Usá formato de 24 horas, por ejemplo 19:30. La hora actual del teléfono es ${DeviceClock.currentTime()}." to "Skill de alarmas"
                                 } else {
                                     try {
@@ -141,6 +144,7 @@ fun ChatScreen() {
                                             putExtra(AlarmClock.EXTRA_SKIP_UI, false)
                                         }
                                         context.startActivity(alarm)
+                                        awaitingAlarmTime = false
                                         answer = "Hora actual del teléfono: ${DeviceClock.currentTime()}. Solicité al reloj del sistema una alarma para %02d:%02d; revisá esa hora en la pantalla que se abrió y confirmala. Fénix no cambia la hora pedida ni confirma la alarma por vos.".format(hour, minute) to "Skill de alarmas"
                                     } catch (_: Exception) {
                                         answer = "No encontré una aplicación de reloj compatible para crear la alarma." to "Skill de alarmas"
