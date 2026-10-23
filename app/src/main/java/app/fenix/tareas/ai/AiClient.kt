@@ -1,5 +1,6 @@
 package app.fenix.tareas.ai
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -31,6 +32,8 @@ class AiClient(private val store: SecureProviderStore) {
                     }
                     if (response.isNotBlank()) return@withContext response to provider.name
                     failures += "${provider.name}: respuesta vacía"
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     failures += "${provider.name}: ${e.message ?: e.javaClass.simpleName}"
                 }
