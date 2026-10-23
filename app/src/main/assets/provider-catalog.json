@@ -1,8 +1,10 @@
 {
-  "catalogVersion": 1,
-  "note": "La disponibilidad gratuita y los requisitos de registro cambian. Verificar el proveedor antes de usarlo.",
+  "catalogVersion": 2,
+  "note": "Los servicios públicos sin clave pueden limitar, poner en cola o cambiar su acceso. Ollama requiere un servidor propio accesible por red.",
   "providers": [
     {"id":"pollinations","name":"Pollinations (sin clave, experimental)","baseUrl":"https://text.pollinations.ai","model":"openai","noKey":true},
+    {"id":"ai-horde","name":"AI Horde (sin clave, cola pública)","baseUrl":"https://aihorde.net/api/v2","model":"koboldcpp/LLaMA2-13B-Tiefighter","noKey":true},
+    {"id":"ollama","name":"Ollama local/remoto (sin clave)","baseUrl":"http://127.0.0.1:11434","model":"llama3.2","noKey":true},
     {"id":"openrouter","name":"OpenRouter","baseUrl":"","model":"","noKey":false},
     {"id":"groq","name":"Groq","baseUrl":"","model":"","noKey":false},
     {"id":"cerebras","name":"Cerebras","baseUrl":"","model":"","noKey":false},
