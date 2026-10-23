@@ -1,6 +1,7 @@
 package app.fenix.tareas.ai
 
 import android.content.Intent
+import android.net.Uri
 import android.provider.AlarmClock
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +15,37 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private data class UiMessage(val role: String, val text: String, val provider: String? = null)
+
+/**
+ * Lets the user change a provider endpoint from chat without requiring any model/API.
+ * Only an explicit user command is handled; URLs must use HTTPS except an Ollama endpoint.
+ */
+private fun applyProviderUrlChange(store: SecureProviderStore, prompt: String): Pair<String, String>? {
+    val match = Regex(
+        """(?i)\b(?:cambia|cambiá|cambiar|modifica|modificá|modificar|actualiza|actualizá|actualizar)\s+(?:la\s+)?(?:url(?:\s+base)?|endpoint)\s+(?:del\s+proveedor\s+|de\s+la\s+|de\s+)(.+?)\s+(?:a|por)\s+(https?://[^\s"'<>]+)"""
+    ).find(prompt) ?: return null
+
+    val target = match.groupValues[1].trim().trimEnd(':', ',', '.')
+    val rawUrl = match.groupValues[2].trim().trimEnd('.', ',', ')', ']', '}')
+    val providers = store.loadWithCatalog()
+    val provider = providers.firstOrNull {
+        it.id.equals(target, ignoreCase = true) ||
+            it.name.equals(target, ignoreCase = true) ||
+            it.name.startsWith(target, ignoreCase = true)
+    } ?: return "No encontré el proveedor «$target». Abrí «IA y API» y verificá el nombre del catálogo." to "Configuración local"
+
+    val uri = try { Uri.parse(rawUrl) } catch (_: Exception) { null }
+    val isHttps = uri?.scheme.equals("https", ignoreCase = true)
+    val isOllamaHttp = provider.id.equals("ollama", ignoreCase = true) &&
+        uri?.scheme.equals("http", ignoreCase = true) && !uri?.host.isNullOrBlank()
+    if (uri?.host.isNullOrBlank() || uri?.userInfo != null || (!isHttps && !isOllamaHttp)) {
+        return "No cambié la URL. Usá una URL HTTPS válida; solo Ollama permite HTTP para una instancia propia en tu red." to "Configuración local"
+    }
+
+    val updated = provider.copy(baseUrl = rawUrl.trimEnd('/'))
+    store.save(providers.map { if (it.id == provider.id) updated else it })
+    return "Actualicé la URL base de \${provider.name} a \${updated.baseUrl}. El cambio quedó guardado localmente; probá la conexión en «IA y API»." to "Configuración local"
+}
 
 @Composable
 fun ChatScreen() {
@@ -66,7 +98,10 @@ fun ChatScreen() {
                         store.loadWithCatalog()
                         val lower = prompt.lowercase()
                         var answer: Pair<String, String> = "" to ""
-                        if (lower.contains("alarma") || lower.contains("despertador")) {
+                        val urlChange = applyProviderUrlChange(store, prompt)
+                        if (urlChange != null) {
+                            answer = urlChange
+                        } else if (lower.contains("alarma") || lower.contains("despertador")) {
                             val match = Regex("""(?:a las|para las|las)\s+(\d{1,2})(?::(\d{2}))?""").find(lower)
                             if (match == null) {
                                 answer = "Decime la hora, por ejemplo: “poné una alarma a las 7:30”. La hora actual del teléfono es ${DeviceClock.currentTime()}." to "Skill de alarmas"
