@@ -11,7 +11,9 @@ object TaskScheduler {
         val delay = ((runAtMillis ?: System.currentTimeMillis()) - System.currentTimeMillis()).coerceAtLeast(0L)
         val request = OneTimeWorkRequestBuilder<TaskWorker>()
             .setInputData(workDataOf(TaskWorker.KEY_TASK_ID to taskId))
-            .setInitialDelay(delay, TimeUnit.MILLISECONDS).addTag("fenix-task-$taskId").build()
+            .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+            .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
+            .addTag("fenix-task-$taskId").build()
         WorkManager.getInstance(context).enqueueUniqueWork("fenix-task-$taskId", androidx.work.ExistingWorkPolicy.REPLACE, request)
     }
     fun schedule(context: Context, task: TaskEntity) {
