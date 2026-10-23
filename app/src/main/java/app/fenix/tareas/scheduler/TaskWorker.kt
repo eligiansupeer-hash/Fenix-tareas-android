@@ -41,9 +41,11 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             startedAtMillis = startedAt,
             attemptCount = runAttemptCount + 1,
             provider = previousExecution?.provider,
-            result = null,
+            result = previousExecution?.result,
             error = null,
-            sourceCount = 0
+            sourceCount = previousExecution?.sourceCount ?: 0,
+            completedStepCount = previousExecution?.completedStepCount ?: 0,
+            workflowProgress = previousExecution?.workflowProgress ?: "[]"
         )
         dao.saveTaskAndExecution(
             task.copy(status = "En ejecución", lastRunAtMillis = startedAt),
@@ -51,6 +53,38 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         )
 
         try {
+            if (task.workflowSteps.isNotBlank()) {
+                val workflow = TaskWorkflowExecutor(applicationContext, dao).execute(task, execution)
+                val finishedAt = System.currentTimeMillis()
+                val shouldRepeat = task.enabled && task.repeatDays.isNotBlank()
+                val nextRunAt = if (shouldRepeat) TaskScheduler.nextWeeklyRun(task, finishedAt) else null
+                val nextStatus = if (shouldRepeat) "Recurrente: próxima ejecución programada" else "Completada"
+                dao.saveTaskAndExecution(
+                    task.copy(
+                        enabled = shouldRepeat,
+                        status = nextStatus,
+                        scheduleAtMillis = nextRunAt ?: task.scheduleAtMillis,
+                        lastRunAtMillis = startedAt,
+                        lastResult = workflow.report
+                    ),
+                    execution.copy(
+                        status = "Completada",
+                        finishedAtMillis = finishedAt,
+                        durationMillis = (finishedAt - startedAt).coerceAtLeast(0L),
+                        provider = workflow.provider,
+                        result = workflow.report,
+                        error = null,
+                        sourceCount = workflow.sourceCount,
+                        completedStepCount = workflow.completedStepCount,
+                        workflowProgress = workflow.progressJson
+                    )
+                )
+                showNotification(task.title, "El flujo terminó. Revisá el informe en Fénix Tareas.", task.id)
+                if (nextRunAt != null) {
+                    TaskScheduler.enqueue(applicationContext, task.id, nextRunAt, appendAfterCurrent = true)
+                }
+                return@withContext Result.success()
+            }
             val instruction = task.instructions
             val lowerInstruction = instruction.lowercase()
             val searchRequested = listOf(
@@ -136,15 +170,22 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         } catch (e: Exception) {
             val finishedAt = System.currentTimeMillis()
             val errorText = "No se pudo completar la tarea: ${sanitizeError(e.message ?: e.javaClass.simpleName)}"
+            val currentExecution = dao.findExecution(executionId) ?: execution
+            val hasWorkflowProgress = task.workflowSteps.isNotBlank() && currentExecution.completedStepCount > 0
+            val partialReport = currentExecution.result.orEmpty().takeIf { hasWorkflowProgress }.orEmpty()
+            val fullErrorResult = if (partialReport.isNotBlank()) {
+                "El flujo quedó incompleto; se conserva el progreso para reintentar.\n\n$partialReport\n\n$errorText"
+            } else errorText
             val message = errorText.lowercase()
             val retryable = listOf("http 429", "http 5", "timeout", "timed out", "connect", "network", "socket", "rate limit", "503", "502", "504", "cola", "dns").any { message.contains(it) }
             if (retryable && runAttemptCount < 2) {
                 val retryStatus = "Reintentando automáticamente (${runAttemptCount + 1}/3)"
                 dao.saveTaskAndExecution(
-                    task.copy(status = retryStatus, lastRunAtMillis = startedAt, lastResult = "$errorText\n\nFénix volverá a intentarlo por tratarse de un posible fallo temporal."),
-                    execution.copy(
+                    task.copy(status = retryStatus, lastRunAtMillis = startedAt, lastResult = fullErrorResult),
+                    currentExecution.copy(
                         status = "Reintentando",
                         attemptCount = runAttemptCount + 1,
+                        result = if (hasWorkflowProgress) partialReport else fullErrorResult,
                         error = errorText,
                         finishedAtMillis = null,
                         durationMillis = null
@@ -153,12 +194,13 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                 Result.retry()
             } else {
                 dao.saveTaskAndExecution(
-                    task.copy(enabled = task.enabled && task.repeatDays.isNotBlank(), status = "Error", lastRunAtMillis = startedAt, lastResult = errorText),
-                    execution.copy(
+                    task.copy(enabled = task.enabled && task.repeatDays.isNotBlank(), status = "Error", lastRunAtMillis = startedAt, lastResult = fullErrorResult),
+                    currentExecution.copy(
                         status = "Error",
                         finishedAtMillis = finishedAt,
                         durationMillis = (finishedAt - startedAt).coerceAtLeast(0L),
                         attemptCount = runAttemptCount + 1,
+                        result = if (hasWorkflowProgress) partialReport else fullErrorResult,
                         error = errorText
                     )
                 )
