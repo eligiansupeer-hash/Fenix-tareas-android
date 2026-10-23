@@ -1,5 +1,6 @@
 package app.fenix.tareas.ai
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jsoup.Connection
@@ -41,10 +42,10 @@ object WebResearch {
      * Page text is untrusted data and must never be treated as instructions.
      */
     suspend fun search(query: String): List<SearchHit> = withContext(Dispatchers.IO) {
-        val hits = try { searchDuckDuckGo(query) } catch (_: Exception) { emptyList() }
-        val results = if (hits.isNotEmpty()) hits else try { searchWikipedia(query) } catch (_: Exception) { emptyList() }
+        val hits = try { searchDuckDuckGo(query) } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
+        val results = if (hits.isNotEmpty()) hits else try { searchWikipedia(query) } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
         results.take(MAX_PAGES_TO_READ).map { hit ->
-            val page = try { readPublicPage(hit.url) } catch (_: Exception) { null }
+            val page = try { readPublicPage(hit.url) } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
             if (page == null) hit else hit.copy(
                 url = page.finalUrl,
                 pageText = page.text,
