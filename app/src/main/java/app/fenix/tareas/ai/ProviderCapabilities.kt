@@ -3,7 +3,8 @@ package app.fenix.tareas.ai
 enum class ProviderProtocol {
     OPENAI_CHAT_COMPLETIONS,
     POLLINATIONS_TEXT,
-    AI_HORDE_ASYNC
+    AI_HORDE_ASYNC,
+    ANTHROPIC_MESSAGES
 }
 
 /**
@@ -29,6 +30,11 @@ data class ProviderCapabilities(
                     protocol = ProviderProtocol.AI_HORDE_ASYNC,
                     requiresApiKey = false,
                     explanation = "Generación asíncrona en cola pública; disponibilidad y demora variables."
+                )
+                "anthropic" -> ProviderCapabilities(
+                    protocol = ProviderProtocol.ANTHROPIC_MESSAGES,
+                    requiresApiKey = true,
+                    explanation = "API nativa de Anthropic Messages; requiere una API key de Anthropic. No es una API gratuita por defecto."
                 )
                 "ollama" -> ProviderCapabilities(
                     protocol = ProviderProtocol.OPENAI_CHAT_COMPLETIONS,
