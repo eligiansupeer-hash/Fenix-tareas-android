@@ -261,6 +261,8 @@ private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String, Stri
     var instructions by remember { mutableStateOf("") }
     var workflowSteps by remember { mutableStateOf("") }
     var showTemplates by remember { mutableStateOf(false) }
+    val workflowLines = workflowSteps.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.toList()
+    val workflowValid = workflowSteps.isBlank() || (workflowLines.size in 1..10 && workflowLines.all { it.length <= 300 })
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Nueva tarea") },
@@ -340,12 +342,15 @@ private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String, Stri
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text("Si completás los pasos, Fénix ejecutará cada uno en orden y pasará los resultados anteriores al siguiente.", style = MaterialTheme.typography.bodySmall)
+                if (!workflowValid) {
+                    Text("El flujo debe tener entre 1 y 10 pasos no vacíos; cada paso admite hasta 300 caracteres.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = { onCreate(title.trim(), instructions.trim(), workflowSteps.trim()) },
-                enabled = title.isNotBlank() && instructions.isNotBlank()
+                enabled = title.isNotBlank() && instructions.isNotBlank() && workflowValid
             ) { Text("Crear") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }
