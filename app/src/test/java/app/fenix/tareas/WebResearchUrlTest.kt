@@ -1,6 +1,7 @@
 package app.fenix.tareas
 
 import app.fenix.tareas.ai.WebResearch
+import app.fenix.tareas.ai.SearchHit
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -44,6 +45,28 @@ class WebResearchUrlTest {
         assertFalse(WebResearch.isPublicWebUrl("http://[fc00::1]/"))
         assertFalse(WebResearch.isPublicWebUrl("http://[fe80::1]/"))
         assertFalse(WebResearch.isPublicWebUrl("http://[2001:db8::1]/"))
+    }
+
+    @Test
+    fun canonicalUrlKeyIgnoresFragmentsAndTrackingParameters() {
+        assertTrue(
+            WebResearch.canonicalUrlKey("https://example.org/article?utm_source=news#section") ==
+                WebResearch.canonicalUrlKey("https://example.org/article")
+        )
+    }
+
+    @Test
+    fun sourceSelectionPrefersDistinctDomainsAndDeduplicates() {
+        val hits = listOf(
+            SearchHit("A", "https://alpha.example/a?utm_source=x", "a"),
+            SearchHit("A duplicate", "https://alpha.example/a#section", "duplicate"),
+            SearchHit("B", "https://beta.example/b", "b"),
+            SearchHit("C", "https://gamma.example/c", "c"),
+            SearchHit("D", "https://delta.example/d", "d")
+        )
+        val selected = WebResearch.selectDiverseResults(hits)
+        assertEquals(3, selected.size)
+        assertEquals(listOf("alpha.example", "beta.example", "gamma.example"), selected.map { it.sourceHost })
     }
 
     @Test
