@@ -90,31 +90,32 @@ object WebResearch {
      */
     private fun readPublicPage(rawUrl: String): String {
         var currentUrl = rawUrl
-        var response: Connection.Response? = null
-        repeat(MAX_REDIRECTS + 1) { redirectCount ->
+        var redirects = 0
+        val finalResponse: Connection.Response
+        while (true) {
             if (!isPublicWebUrl(currentUrl, resolveDns = true)) {
                 throw IOException("Se rechazó una URL no pública o un destino de redirección inseguro.")
             }
-            val nextResponse = Jsoup.connect(currentUrl)
+            val response = Jsoup.connect(currentUrl)
                 .userAgent(USER_AGENT)
                 .timeout(PAGE_TIMEOUT_MS)
                 .maxBodySize(MAX_PAGE_BYTES)
                 .followRedirects(false)
                 .ignoreHttpErrors(true)
                 .execute()
-            val status = nextResponse.statusCode()
+            val status = response.statusCode()
             if (status in 300..399) {
-                if (redirectCount >= MAX_REDIRECTS) throw IOException("Se excedió el límite de redirecciones.")
-                val location = nextResponse.header("Location")?.trim().orEmpty()
+                if (redirects >= MAX_REDIRECTS) throw IOException("Se excedió el límite de redirecciones.")
+                val location = response.header("Location")?.trim().orEmpty()
                 if (location.isBlank()) throw IOException("Redirección sin destino.")
                 currentUrl = URI(currentUrl).resolve(location).toString()
-                return@repeat
+                redirects += 1
+                continue
             }
             if (status !in 200..299) throw IOException("La página respondió HTTP $status.")
-            response = nextResponse
-            return@repeat
+            finalResponse = response
+            break
         }
-        val finalResponse = response ?: throw IOException("No se pudo completar la lectura de la página.")
         val document = finalResponse.parse()
         document.select("script,style,nav,footer,header,aside,form,button,iframe,noscript,svg,canvas").remove()
         val main = document.selectFirst("article") ?: document.selectFirst("main") ?: document.body()
@@ -175,7 +176,7 @@ object WebResearch {
     private fun isGloballyRoutable(address: InetAddress): Boolean {
         if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
             address.isSiteLocalAddress || address.isMulticastAddress) return false
-        if (address is Inet4Address) {
+        if (address.address.size == 16 && (address.address[0].toInt() and 0xfe) == 0xfc) return false // IPv6 unique-local (fc00::/7)\n        if (address is Inet4Address) {
             val bytes = address.address.map { it.toInt() and 0xff }
             val a = bytes[0]
             val b = bytes[1]
