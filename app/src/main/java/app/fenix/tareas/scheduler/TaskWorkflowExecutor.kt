@@ -32,10 +32,7 @@ class TaskWorkflowExecutor(
         task: TaskEntity,
         execution: TaskExecutionEntity
     ): WorkflowResult {
-        val steps = task.workflowSteps.lineSequence()
-            .map { it.trim().replace(Regex("^[-*•\\s]*\\d*[.)]?\\s*"), "") }
-            .filter { it.isNotBlank() }
-            .toList()
+        val steps = WorkflowStepParser.parse(task.workflowSteps)
         if (steps.isEmpty()) throw IllegalArgumentException("El flujo no contiene pasos válidos.")
         if (steps.size > MAX_STEPS) throw IllegalArgumentException("Un flujo puede contener como máximo $MAX_STEPS pasos.")
         val reports = restoreProgress(execution.workflowProgress)
