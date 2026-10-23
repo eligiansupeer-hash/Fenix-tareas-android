@@ -319,21 +319,21 @@ private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String, Stri
                 }
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = { title = it.take(120) },
                     label = { Text("Nombre") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = instructions,
-                    onValueChange = { instructions = it },
+                    onValueChange = { instructions = it.take(4000) },
                     label = { Text("Qué debe hacer") },
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = workflowSteps,
-                    onValueChange = { workflowSteps = it },
+                    onValueChange = { workflowSteps = it.take(3500) },
                     label = { Text("Pasos encadenados (opcional)") },
                     placeholder = { Text("Un paso por línea, en orden. Máximo 10 pasos.") },
                     minLines = 2,
