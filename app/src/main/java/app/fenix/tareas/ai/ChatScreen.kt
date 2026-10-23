@@ -65,54 +65,9 @@ fun ChatScreen() {
 
     LaunchedEffect(Unit) { store.loadWithCatalog() }
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Fénix IA", style = MaterialTheme.typography.headlineMedium)
-        Text("Conversación, investigación web y tareas. La fecha y hora se leen del reloj real del dispositivo.", style = MaterialTheme.typography.bodySmall)
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (messages.isEmpty()) item {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("¿Qué necesitás investigar o resolver?", style = MaterialTheme.typography.titleMedium)
-                        Text("Probá: “Investigá las últimas novedades sobre…” o preguntá directamente.")
-                    }
-                }
-            }
-            items(messages) { message ->
-                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
-                    containerColor = if (message.role == "user") MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                )) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(if (message.role == "user") "Vos" else "Fénix IA", style = MaterialTheme.typography.labelMedium)
-                        Text(message.text)
-                        TextButton(onClick = { clipboard.setText(AnnotatedString(message.text)) }) { Text("Copiar") }
-                        message.provider?.let { Text("Proveedor: $it", style = MaterialTheme.typography.labelSmall) }
-                    }
-                }
-            }
-            if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            error?.let { message ->
-                item {
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(message, color = MaterialTheme.colorScheme.onErrorContainer)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(onClick = { clipboard.setText(AnnotatedString(message)) }) { Text("Copiar error") }
-                                if (failedPrompt != null) TextButton(onClick = {
-                                    input = failedPrompt.orEmpty()
-                                    error = null
-                                }) { Text("Recuperar mensaje") }
-                            }
-                            Text("El mensaje original queda conservado en el campo para que puedas reenviarlo.", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-            }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f),
-                label = { Text("Escribí un mensaje") }, maxLines = 4, enabled = !busy)
-            Button(enabled = input.isNotBlank() && !busy, onClick = {
-                val prompt = input.trim()
+    fun sendPrompt(prompt: String) {
+        if (prompt.isBlank() || busy) return
+
                 input = ""; error = null; failedPrompt = null
                 messages.add(UiMessage("user", prompt)); busy = true
                 scope.launch {
@@ -182,8 +137,55 @@ fun ChatScreen() {
                         input = prompt
                         error = e.message ?: "No se pudo completar la solicitud."
                     } finally { busy = false }
+                
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Fénix IA", style = MaterialTheme.typography.headlineMedium)
+        Text("Conversación, investigación web y tareas. La fecha y hora se leen del reloj real del dispositivo.", style = MaterialTheme.typography.bodySmall)
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (messages.isEmpty()) item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("¿Qué necesitás investigar o resolver?", style = MaterialTheme.typography.titleMedium)
+                        Text("Probá: “Investigá las últimas novedades sobre…” o preguntá directamente.")
+                    }
                 }
-            }) { Text("Enviar") }
+            }
+            items(messages) { message ->
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
+                    containerColor = if (message.role == "user") MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                )) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(if (message.role == "user") "Vos" else "Fénix IA", style = MaterialTheme.typography.labelMedium)
+                        Text(message.text)
+                        TextButton(onClick = { clipboard.setText(AnnotatedString(message.text)) }) { Text("Copiar") }
+                        message.provider?.let { Text("Proveedor: $it", style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
+            }
+            if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            error?.let { message ->
+                item {
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(message, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = { clipboard.setText(AnnotatedString(message)) }) { Text("Copiar error") }
+                                if (failedPrompt != null) TextButton(onClick = {
+                                    failedPrompt?.let { sendPrompt(it) }
+                                }) { Text("Reintentar") }
+                            }
+                            Text("Podés copiar el error o reintentar el último mensaje sin volver a escribirlo.", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f),
+                label = { Text("Escribí un mensaje") }, maxLines = 4, enabled = !busy)
+            Button(enabled = input.isNotBlank() && !busy, onClick = { sendPrompt(input.trim()) }) { Text("Enviar") }
         }
     }
 }
