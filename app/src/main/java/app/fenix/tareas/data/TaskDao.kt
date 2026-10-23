@@ -27,6 +27,33 @@ interface TaskDao {
     @Query("DELETE FROM task_executions WHERE startedAtMillis < :cutoffMillis")
     suspend fun deleteExecutionsBefore(cutoffMillis: Long)
 
+    @Query("UPDATE tasks SET lastResult = NULL WHERE lastRunAtMillis < :cutoffMillis")
+    suspend fun clearTaskResultsBefore(cutoffMillis: Long)
+
+    @Query("UPDATE tasks SET lastResult = NULL")
+    suspend fun clearAllTaskResults()
+
+    @Query("UPDATE tasks SET lastResult = NULL WHERE id = :taskId AND lastRunAtMillis = :runAtMillis")
+    suspend fun clearTaskResultForRun(taskId: Long, runAtMillis: Long)
+
+    @Transaction
+    suspend fun pruneHistoryBefore(cutoffMillis: Long) {
+        deleteExecutionsBefore(cutoffMillis)
+        clearTaskResultsBefore(cutoffMillis)
+    }
+
+    @Transaction
+    suspend fun clearHistoryAndTaskResults() {
+        clearExecutions()
+        clearAllTaskResults()
+    }
+
+    @Transaction
+    suspend fun deleteExecutionAndClearLatestResult(execution: TaskExecutionEntity) {
+        deleteExecution(execution.executionId)
+        clearTaskResultForRun(execution.taskId, execution.startedAtMillis)
+    }
+
     @Query("SELECT * FROM tasks ORDER BY createdAtMillis DESC")
     fun observeAll(): Flow<List<TaskEntity>>
     @Query("SELECT * FROM tasks WHERE id = :id LIMIT 1")
