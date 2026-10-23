@@ -17,13 +17,16 @@ data class SearchHit(
     val title: String,
     val url: String,
     val snippet: String,
-    val pageText: String = ""
+    val pageText: String = "",
+    val publishedAt: String? = null,
+    val retrievedAtMillis: Long = System.currentTimeMillis()
 ) {
     val sourceHost: String
         get() = runCatching { URI(url).host.orEmpty().removePrefix("www.") }.getOrDefault("")
 }
 
 object WebResearch {
+    private data class PageContent(val finalUrl: String, val text: String, val publishedAt: String?)
     private const val SEARCH_TIMEOUT_MS = 12_000
     private const val PAGE_TIMEOUT_MS = 8_000
     private const val MAX_PAGES_TO_READ = 3
@@ -41,8 +44,12 @@ object WebResearch {
         val hits = try { searchDuckDuckGo(query) } catch (_: Exception) { emptyList() }
         val results = if (hits.isNotEmpty()) hits else try { searchWikipedia(query) } catch (_: Exception) { emptyList() }
         results.take(MAX_PAGES_TO_READ).map { hit ->
-            val pageText = try { readPublicPage(hit.url) } catch (_: Exception) { "" }
-            hit.copy(pageText = pageText)
+            val page = try { readPublicPage(hit.url) } catch (_: Exception) { null }
+            if (page == null) hit else hit.copy(
+                url = page.finalUrl,
+                pageText = page.text,
+                publishedAt = page.publishedAt
+            )
         }
     }
 
@@ -88,7 +95,7 @@ object WebResearch {
      * DNS results are checked before each request to reject hosts resolving to local/private
      * addresses. This is defense-in-depth; it is not a substitute for network-layer egress rules.
      */
-    private fun readPublicPage(rawUrl: String): String {
+    private fun readPublicPage(rawUrl: String): PageContent {
         var currentUrl = rawUrl
         var redirects = 0
         var finalResponse: Connection.Response? = null
@@ -116,13 +123,23 @@ object WebResearch {
             finalResponse = response
             break
         }
-        val document = (finalResponse ?: throw IOException("No se pudo leer la respuesta de la página.")).parse()
+        val response = finalResponse ?: throw IOException("No se pudo leer la respuesta de la página.")
+        val document = response.parse()
+        val publishedAt = listOf(
+            document.selectFirst("meta[property=article:published_time]")?.attr("content"),
+            document.selectFirst("meta[name=date]")?.attr("content"),
+            document.selectFirst("meta[name=pubdate]")?.attr("content"),
+            document.selectFirst("time[datetime]")?.attr("datetime")
+        ).firstOrNull { !it.isNullOrBlank() }?.trim()
         document.select("script,style,nav,footer,header,aside,form,button,iframe,noscript,svg,canvas").remove()
         val main = document.selectFirst("article") ?: document.selectFirst("main") ?: document.body()
-        return main?.text().orEmpty()
+        val text = main?.text().orEmpty()
             .replace(Regex("\\s+"), " ")
             .trim()
             .take(MAX_CHARS_PER_PAGE)
+        val finalUrl = response.url().toString()
+        if (!isPublicWebUrl(finalUrl)) throw IOException("La URL final de la página no es pública.")
+        return PageContent(finalUrl = finalUrl, text = text, publishedAt = publishedAt)
     }
 
     private fun unwrapDuckDuckGo(rawUrl: String): String {
