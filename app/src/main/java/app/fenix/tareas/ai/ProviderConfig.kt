@@ -9,19 +9,20 @@ data class ProviderConfig(
     val model: String,
     val apiKeys: List<String> = emptyList(),
     val enabled: Boolean = true,
-    val noKey: Boolean = false
+    val noKey: Boolean = false,
+    val apiKeyUrl: String = ""
 ) {
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name)
         .put("baseUrl", baseUrl).put("model", model).put("apiKeys", org.json.JSONArray(apiKeys))
-        .put("enabled", enabled).put("noKey", noKey)
+        .put("enabled", enabled).put("noKey", noKey).put("apiKeyUrl", apiKeyUrl)
 
     companion object {
         fun fromJson(o: JSONObject): ProviderConfig {
             val keys = o.optJSONArray("apiKeys")
             return ProviderConfig(
-                o.optString("id"), o.optString("name"), o.optString("baseUrl"),
-                o.optString("model"), (0 until (keys?.length() ?: 0)).map { keys!!.optString(it) },
-                o.optBoolean("enabled", true), o.optBoolean("noKey", false)
+                o.optString("id"), o.optString("name"), o.optString("baseUrl"), o.optString("model"),
+                (0 until (keys?.length() ?: 0)).map { keys!!.optString(it) },
+                o.optBoolean("enabled", true), o.optBoolean("noKey", false), o.optString("apiKeyUrl")
             )
         }
     }
