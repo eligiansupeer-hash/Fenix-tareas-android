@@ -39,7 +39,7 @@ class AiClient(private val store: SecureProviderStore) {
                     }
                     if (response.isNotBlank()) {
                         providerHealth.recordSuccess(provider.id, System.currentTimeMillis() - providerStartedAt)
-                        return@withContext response to provider.name
+                        return@withContext response to "${provider.name} · ${provider.model}"
                     }
                     failures += "${provider.name}: respuesta vacía"
                 } catch (e: CancellationException) {
