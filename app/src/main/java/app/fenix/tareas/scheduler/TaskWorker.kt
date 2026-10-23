@@ -33,7 +33,7 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                     "\n\nSintetizá la información, señalá incertidumbres y agregá una sección Fuentes con los enlaces originales."
             } else instruction
             val (response, provider) = AiClient(SecureProviderStore(applicationContext))
-                .complete(listOf(ChatMessage("user", prompt)))
+                .complete(listOf(ChatMessage("system", app.fenix.tareas.ai.DeviceClock.contextLine()), ChatMessage("user", prompt)))
             val sourceList = if (hits.isEmpty()) "" else "\n\nFuentes consultadas:\n" + hits.joinToString("\n") { "• ${it.title}: ${it.url}" }
             val resultText = "Proveedor: $provider\n\n$response$sourceList"
             val nextStatus = if (task.enabled && task.repeatDays.isNotBlank()) "Recurrente: próxima ejecución programada" else "Completada"
