@@ -195,7 +195,8 @@ object WebResearch {
     private fun isGloballyRoutable(address: InetAddress): Boolean {
         if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress ||
             address.isSiteLocalAddress || address.isMulticastAddress) return false
-        if (address.address.size == 16 && (address.address[0].toInt() and 0xfe) == 0xfc) return false // IPv6 unique-local (fc00::/7)\n        if (address is Inet4Address) {
+        if (address.address.size == 16 && (address.address[0].toInt() and 0xfe) == 0xfc) return false // IPv6 unique-local (fc00::/7)
+        if (address is Inet4Address) {
             val bytes = address.address.map { it.toInt() and 0xff }
             val a = bytes[0]
             val b = bytes[1]
