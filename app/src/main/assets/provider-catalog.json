@@ -1,18 +1,22 @@
 {
-  "catalogVersion": 2,
-  "note": "Los servicios públicos sin clave pueden limitar, poner en cola o cambiar su acceso. Ollama requiere un servidor propio accesible por red.",
+  "catalogVersion": 3,
+  "note": "Las URLs y modelos son editables. Los servicios con clave pueden tener límites o cobrar según el plan. Ollama necesita un servidor accesible desde el teléfono.",
   "providers": [
-    {"id":"pollinations","name":"Pollinations (sin clave, experimental)","baseUrl":"https://text.pollinations.ai","model":"openai","noKey":true},
-    {"id":"ai-horde","name":"AI Horde (sin clave, cola pública)","baseUrl":"https://aihorde.net/api/v2","model":"koboldcpp/LLaMA2-13B-Tiefighter","noKey":true},
-    {"id":"ollama","name":"Ollama local/remoto (sin clave)","baseUrl":"http://127.0.0.1:11434","model":"llama3.2","noKey":true},
-    {"id":"openrouter","name":"OpenRouter","baseUrl":"","model":"","noKey":false},
-    {"id":"groq","name":"Groq","baseUrl":"","model":"","noKey":false},
-    {"id":"cerebras","name":"Cerebras","baseUrl":"","model":"","noKey":false},
-    {"id":"google","name":"Google AI Studio","baseUrl":"","model":"","noKey":false},
-    {"id":"huggingface","name":"Hugging Face Inference","baseUrl":"","model":"","noKey":false},
-    {"id":"mistral","name":"Mistral La Plateforme","baseUrl":"","model":"","noKey":false},
-    {"id":"github-models","name":"GitHub Models","baseUrl":"","model":"","noKey":false},
-    {"id":"nvidia","name":"NVIDIA API Catalog","baseUrl":"","model":"","noKey":false},
-    {"id":"custom","name":"Proveedor compatible OpenAI","baseUrl":"","model":"","noKey":false}
+    {"id":"pollinations","name":"Pollinations (sin clave, experimental)","baseUrl":"https://text.pollinations.ai","model":"openai","noKey":true,"apiKeyUrl":"https://pollinations.ai/"},
+    {"id":"ai-horde","name":"AI Horde (sin clave, cola pública)","baseUrl":"https://aihorde.net/api/v2","model":"koboldcpp/LLaMA2-13B-Tiefighter","noKey":true,"apiKeyUrl":"https://aihorde.net/"},
+    {"id":"ollama","name":"Ollama local/remoto (sin clave)","baseUrl":"http://127.0.0.1:11434","model":"llama3.2","noKey":true,"apiKeyUrl":"https://ollama.com/download"},
+    {"id":"openai","name":"OpenAI API","baseUrl":"https://api.openai.com/v1","model":"gpt-4.1-mini","noKey":false,"apiKeyUrl":"https://platform.openai.com/api-keys"},
+    {"id":"openrouter","name":"OpenRouter","baseUrl":"https://openrouter.ai/api/v1","model":"openai/gpt-4o-mini","noKey":false,"apiKeyUrl":"https://openrouter.ai/settings/keys"},
+    {"id":"groq","name":"Groq","baseUrl":"https://api.groq.com/openai/v1","model":"llama-3.3-70b-versatile","noKey":false,"apiKeyUrl":"https://console.groq.com/keys"},
+    {"id":"cerebras","name":"Cerebras","baseUrl":"https://api.cerebras.ai/v1","model":"llama-3.3-70b","noKey":false,"apiKeyUrl":"https://cloud.cerebras.ai/platform"},
+    {"id":"google","name":"Google Gemini API","baseUrl":"https://generativelanguage.googleapis.com/v1beta/openai","model":"gemini-2.5-flash","noKey":false,"apiKeyUrl":"https://aistudio.google.com/app/apikey"},
+    {"id":"huggingface","name":"Hugging Face Inference","baseUrl":"https://router.huggingface.co/v1","model":"meta-llama/Llama-3.3-70B-Instruct","noKey":false,"apiKeyUrl":"https://huggingface.co/settings/tokens"},
+    {"id":"mistral","name":"Mistral API","baseUrl":"https://api.mistral.ai/v1","model":"mistral-small-latest","noKey":false,"apiKeyUrl":"https://console.mistral.ai/api-keys/"},
+    {"id":"github-models","name":"GitHub Models","baseUrl":"https://models.github.ai/inference","model":"openai/gpt-4.1-mini","noKey":false,"apiKeyUrl":"https://github.com/settings/personal-access-tokens"},
+    {"id":"nvidia","name":"NVIDIA API Catalog","baseUrl":"https://integrate.api.nvidia.com/v1","model":"meta/llama-3.3-70b-instruct","noKey":false,"apiKeyUrl":"https://build.nvidia.com/"},
+    {"id":"deepseek","name":"DeepSeek API","baseUrl":"https://api.deepseek.com/v1","model":"deepseek-chat","noKey":false,"apiKeyUrl":"https://platform.deepseek.com/api_keys"},
+    {"id":"together","name":"Together AI","baseUrl":"https://api.together.xyz/v1","model":"meta-llama/Llama-3.3-70B-Instruct-Turbo","noKey":false,"apiKeyUrl":"https://api.together.ai/settings/api-keys"},
+    {"id":"fireworks","name":"Fireworks AI","baseUrl":"https://api.fireworks.ai/inference/v1","model":"accounts/fireworks/models/llama-v3p3-70b-instruct","noKey":false,"apiKeyUrl":"https://fireworks.ai/account/api-keys"},
+    {"id":"custom","name":"Proveedor compatible OpenAI","baseUrl":"","model":"","noKey":false,"apiKeyUrl":""}
   ]
 }
