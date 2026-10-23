@@ -25,9 +25,11 @@ fun ChatScreen() {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    LaunchedEffect(Unit) { store.loadWithCatalog() }
+
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Fénix IA", style = MaterialTheme.typography.headlineMedium)
-        Text("Conversación, investigación web y tareas. Las respuestas de IA requieren conexión a un proveedor.", style = MaterialTheme.typography.bodySmall)
+        Text("Conversación, investigación web y tareas. La fecha y hora se leen del reloj real del dispositivo.", style = MaterialTheme.typography.bodySmall)
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (messages.isEmpty()) item {
                 Card(Modifier.fillMaxWidth()) {
@@ -60,17 +62,18 @@ fun ChatScreen() {
                 messages.add(UiMessage("user", prompt)); busy = true
                 scope.launch {
                     try {
+                        store.loadWithCatalog()
                         val lower = prompt.lowercase()
                         var answer: Pair<String, String> = "" to ""
                         if (lower.contains("alarma") || lower.contains("despertador")) {
                             val match = Regex("""(?:a las|para las|las)\s+(\d{1,2})(?::(\d{2}))?""").find(lower)
                             if (match == null) {
-                                answer = "Decime la hora, por ejemplo: “poné una alarma a las 7:30”." to "Skill de alarmas"
+                                answer = "Decime la hora, por ejemplo: “poné una alarma a las 7:30”. La hora actual del teléfono es ${DeviceClock.currentTime()}." to "Skill de alarmas"
                             } else {
                                 val hour = match.groupValues[1].toIntOrNull() ?: -1
                                 val minute = match.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }?.toIntOrNull() ?: 0
                                 if (hour !in 0..23 || minute !in 0..59) {
-                                    answer = "La hora no es válida. Usá formato de 24 horas, por ejemplo 19:30." to "Skill de alarmas"
+                                    answer = "La hora no es válida. Usá formato de 24 horas, por ejemplo 19:30. La hora actual del teléfono es ${DeviceClock.currentTime()}." to "Skill de alarmas"
                                 } else {
                                     try {
                                         val alarm = Intent(AlarmClock.ACTION_SET_ALARM).apply {
@@ -80,7 +83,7 @@ fun ChatScreen() {
                                             putExtra(AlarmClock.EXTRA_SKIP_UI, false)
                                         }
                                         context.startActivity(alarm)
-                                        answer = "Abrí la aplicación de reloj para confirmar la alarma de %02d:%02d. La alarma queda sujeta a la confirmación del sistema.".format(hour, minute) to "Skill de alarmas"
+                                        answer = "Hora actual del teléfono: ${DeviceClock.currentTime()}. Solicité al reloj del sistema una alarma para %02d:%02d; revisá esa hora en la pantalla que se abrió y confirmala. Fénix no cambia la hora pedida ni confirma la alarma por vos.".format(hour, minute) to "Skill de alarmas"
                                     } catch (_: Exception) {
                                         answer = "No encontré una aplicación de reloj compatible para crear la alarma." to "Skill de alarmas"
                                     }
@@ -89,15 +92,19 @@ fun ChatScreen() {
                         } else if (listOf("investig", "buscá", "busca en la web", "fuentes", "noticias").any { lower.contains(it) }) {
                             val hits = WebResearch.search(prompt)
                             if (hits.isEmpty()) {
-                                answer = client.complete(messages.map { ChatMessage(it.role, it.text) })
-                                    .let { "No encontré resultados en el proveedor de búsqueda utilizado. Respuesta del modelo: ${it.first}" to it.second }
+                                val history = messages.map { ChatMessage(it.role, it.text) }
+                                answer = client.complete(listOf(ChatMessage("system", DeviceClock.contextLine())) + history)
+                                    .let { "No encontré resultados web en esta búsqueda. Respuesta del modelo: ${it.first}" to it.second }
                             } else {
                                 val sourceText = hits.joinToString("\n\n") { "- ${it.title}\n${it.snippet}\nURL: ${it.url}" }
                                 val researchPrompt = "Respondé en español usando únicamente estos resultados de búsqueda. Aclarà que son resultados preliminares, distinguí hechos de inferencias y conservá los enlaces como fuentes.\nConsulta: $prompt\n\nResultados:\n$sourceText"
-                                answer = client.complete(listOf(ChatMessage("user", researchPrompt)))
+                                answer = client.complete(listOf(ChatMessage("system", DeviceClock.contextLine()), ChatMessage("user", researchPrompt)))
                                     .let { "${it.first}\n\nFuentes consultadas:\n" + hits.joinToString("\n") { hit -> "• ${hit.title}: ${hit.url}" } to it.second }
                             }
-                        } else answer = client.complete(messages.map { ChatMessage(it.role, it.text) })
+                        } else {
+                            val history = messages.map { ChatMessage(it.role, it.text) }
+                            answer = client.complete(listOf(ChatMessage("system", DeviceClock.contextLine())) + history)
+                        }
                         messages.add(UiMessage("assistant", answer.first, answer.second))
                     } catch (e: Exception) { error = e.message ?: "No se pudo completar la solicitud." }
                     finally { busy = false }
