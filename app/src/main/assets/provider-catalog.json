@@ -1,0 +1,16 @@
+{
+  "catalogVersion": 1,
+  "note": "La disponibilidad gratuita y los requisitos de registro cambian. Verificar el proveedor antes de usarlo.",
+  "providers": [
+    {"id":"pollinations","name":"Pollinations (sin clave, experimental)","baseUrl":"https://text.pollinations.ai/openai/v1","model":"openai","noKey":true},
+    {"id":"openrouter","name":"OpenRouter","baseUrl":"","model":"","noKey":false},
+    {"id":"groq","name":"Groq","baseUrl":"","model":"","noKey":false},
+    {"id":"cerebras","name":"Cerebras","baseUrl":"","model":"","noKey":false},
+    {"id":"google","name":"Google AI Studio","baseUrl":"","model":"","noKey":false},
+    {"id":"huggingface","name":"Hugging Face Inference","baseUrl":"","model":"","noKey":false},
+    {"id":"mistral","name":"Mistral La Plateforme","baseUrl":"","model":"","noKey":false},
+    {"id":"github-models","name":"GitHub Models","baseUrl":"","model":"","noKey":false},
+    {"id":"nvidia","name":"NVIDIA API Catalog","baseUrl":"","model":"","noKey":false},
+    {"id":"custom","name":"Proveedor compatible OpenAI","baseUrl":"","model":"","noKey":false}
+  ]
+}
