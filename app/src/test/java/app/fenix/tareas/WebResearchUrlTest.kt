@@ -43,6 +43,7 @@ class WebResearchUrlTest {
         assertFalse(WebResearch.isPublicWebUrl("http://[::1]/"))
         assertFalse(WebResearch.isPublicWebUrl("http://[fc00::1]/"))
         assertFalse(WebResearch.isPublicWebUrl("http://[fe80::1]/"))
+        assertFalse(WebResearch.isPublicWebUrl("http://[2001:db8::1]/"))
     }
 
     @Test
