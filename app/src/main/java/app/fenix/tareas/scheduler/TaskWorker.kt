@@ -76,7 +76,7 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                     ChatMessage("user", finalPrompt)
                 ))
             val sourceList = if (hits.isEmpty()) "" else "\n\nFuentes consultadas:\n" + hits.mapIndexed { index, hit ->
-                "[${index + 1}] ${hit.title} (${hit.sourceHost}) — ${hit.url}"
+                "[${index + 1}] ${hit.title} (${hit.sourceHost}) — publicación: ${hit.publishedAt ?: "no detectada"}; consulta: ${Instant.ofEpochMilli(hit.retrievedAtMillis)} — ${hit.url}"
             }.joinToString("\n")
             val resultText = "Proveedor: $provider\n\n$response$sourceList"
             val finishedAt = System.currentTimeMillis()
