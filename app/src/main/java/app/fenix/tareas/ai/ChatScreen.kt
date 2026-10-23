@@ -89,7 +89,7 @@ fun ChatScreen() {
                                     }
                                 }
                             }
-                        } else if (listOf("investig", "buscá", "busca en la web", "fuentes", "noticias").any { lower.contains(it) }) {
+                        } else if (listOf("investig", "busc", "web", "internet", "fuentes", "noticias", "actualiz", "últim", "ultim", "hoy", "compar", "verific", "contrast", "antecedentes", "evidencia").any { lower.contains(it) }) {
                             val hits = WebResearch.search(prompt)
                             if (hits.isEmpty()) {
                                 val history = messages.map { ChatMessage(it.role, it.text) }
