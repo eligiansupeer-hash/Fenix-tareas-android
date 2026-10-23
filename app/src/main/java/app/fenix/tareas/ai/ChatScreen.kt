@@ -90,14 +90,30 @@ fun ChatScreen() {
                 }
             }
             if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+            error?.let { message ->
+                item {
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(message, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = { clipboard.setText(AnnotatedString(message)) }) { Text("Copiar error") }
+                                if (failedPrompt != null) TextButton(onClick = {
+                                    input = failedPrompt.orEmpty()
+                                    error = null
+                                }) { Text("Recuperar mensaje") }
+                            }
+                            Text("El mensaje original queda conservado en el campo para que puedas reenviarlo.", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f),
                 label = { Text("Escribí un mensaje") }, maxLines = 4, enabled = !busy)
             Button(enabled = input.isNotBlank() && !busy, onClick = {
                 val prompt = input.trim()
-                input = ""; error = null
+                input = ""; error = null; failedPrompt = null
                 messages.add(UiMessage("user", prompt)); busy = true
                 scope.launch {
                     try {
@@ -158,6 +174,8 @@ fun ChatScreen() {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        failedPrompt = prompt
+                        input = prompt
                         error = e.message ?: "No se pudo completar la solicitud."
                     } finally { busy = false }
                 }
