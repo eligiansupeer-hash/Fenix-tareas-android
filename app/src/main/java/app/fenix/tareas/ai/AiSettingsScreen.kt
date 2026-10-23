@@ -21,6 +21,7 @@ fun AiSettingsScreen() {
     var providers by remember { mutableStateOf(store.load()) }
     var selected by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf<String?>(null) }
+    var testing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { providers = store.loadWithCatalog() }
@@ -41,7 +42,8 @@ fun AiSettingsScreen() {
             OutlinedTextField(value = provider.name, onValueChange = { v -> providers = providers.toMutableList().also { it[selected] = provider.copy(name = v) } }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(value = provider.baseUrl, onValueChange = { v -> providers = providers.toMutableList().also { it[selected] = provider.copy(baseUrl = v) } }, label = { Text("URL base compatible con OpenAI") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(value = provider.model, onValueChange = { v -> providers = providers.toMutableList().also { it[selected] = provider.copy(model = v) } }, label = { Text("Modelo") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Text("Las URL y los modelos se pueden editar; se requiere un endpoint compatible con /chat/completions.")
+            Text(ProviderCapabilities.forProvider(provider).explanation, style = MaterialTheme.typography.bodySmall)
+            Text("El test envía un mensaje breve al proveedor seleccionado y puede consumir una pequeña cantidad de cuota.")
             if (!provider.noKey) {
                 provider.apiKeys.forEachIndexed { keyIndex, key ->
                     OutlinedTextField(value = key, onValueChange = { v ->
@@ -62,12 +64,27 @@ fun AiSettingsScreen() {
                     store.save(providers)
                     status = "Configuración guardada cifrada en este dispositivo."
                 }) { Text("Guardar") }
+                OutlinedButton(
+                    enabled = !testing && provider.baseUrl.isNotBlank() && provider.model.isNotBlank(),
+                    onClick = {
+                        scope.launch {
+                            testing = true
+                            status = try {
+                                AiClient(store).testProvider(provider)
+                            } catch (e: Exception) {
+                                "Prueba fallida: ${e.message ?: e.javaClass.simpleName}"
+                            } finally {
+                                testing = false
+                            }
+                        }
+                    }
+                ) { Text(if (testing) "Probando…" else "Probar conexión") }
                 OutlinedButton(onClick = {
                     if (providers.size < 20) {
                         providers = providers + ProviderConfig("custom-${System.currentTimeMillis()}", "Proveedor personalizado", "", "", emptyList(), true, false)
                         selected = providers.lastIndex
                     }
-                }) { Text("Agregar proveedor") }
+                }) { Text("Agregar") }
             }
         }
         status?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
