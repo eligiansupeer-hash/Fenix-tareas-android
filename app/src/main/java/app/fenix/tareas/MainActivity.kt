@@ -193,9 +193,9 @@ fun TaskHome() {
     if (showDialog) {
         NewTaskDialog(
             onDismiss = { showDialog = false },
-            onCreate = { title, instructions ->
+            onCreate = { title, instructions, workflowSteps ->
                 scope.launch {
-                    dao.insert(TaskEntity(title = title, instructions = instructions))
+                    dao.insert(TaskEntity(title = title, instructions = instructions, workflowSteps = workflowSteps))
                     showDialog = false
                 }
             }
@@ -250,9 +250,10 @@ private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit
 }
 
 @Composable
-private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String) -> Unit) {
+private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String, String) -> Unit) {
     var title by remember { mutableStateOf("") }
     var instructions by remember { mutableStateOf("") }
+    var workflowSteps by remember { mutableStateOf("") }
     var showTemplates by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -315,11 +316,20 @@ private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String) -> U
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = workflowSteps,
+                    onValueChange = { workflowSteps = it },
+                    label = { Text("Pasos encadenados (opcional)") },
+                    placeholder = { Text("Un paso por línea, en orden. Máximo 10 pasos.") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("Si completás los pasos, Fénix ejecutará cada uno en orden y pasará los resultados anteriores al siguiente.", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {
             Button(
-                onClick = { onCreate(title.trim(), instructions.trim()) },
+                onClick = { onCreate(title.trim(), instructions.trim(), workflowSteps.trim()) },
                 enabled = title.isNotBlank() && instructions.isNotBlank()
             ) { Text("Crear") }
         },
