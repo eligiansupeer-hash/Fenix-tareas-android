@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 @Dao
 interface TaskDao {
@@ -27,4 +28,10 @@ interface TaskDao {
     @Insert suspend fun insert(task: TaskEntity): Long
     @Update suspend fun update(task: TaskEntity)
     @Delete suspend fun delete(task: TaskEntity)
+
+    @Transaction
+    suspend fun saveTaskAndExecution(task: TaskEntity, execution: TaskExecutionEntity) {
+        update(task)
+        upsertExecution(execution)
+    }
 }
