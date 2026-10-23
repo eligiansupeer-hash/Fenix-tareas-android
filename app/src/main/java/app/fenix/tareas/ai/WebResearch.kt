@@ -150,7 +150,9 @@ object WebResearch {
                 host.endsWith(".invalid" ) || host.endsWith(".example")) return false
             if (host.equals("metadata.google.internal", ignoreCase = true)) return false
 
+            val numericHost = host.matches(Regex("[0-9.]+"))
             val literalAddress = parseIpLiteral(host)
+            if (numericHost && literalAddress == null) return false
             if (literalAddress != null && !isGloballyRoutable(literalAddress)) return false
             if (resolveDns && literalAddress == null) {
                 val addresses = InetAddress.getAllByName(host)
