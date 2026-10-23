@@ -43,8 +43,10 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             error = null,
             sourceCount = 0
         )
-        dao.upsertExecution(execution)
-        dao.update(task.copy(status = "En ejecución", lastRunAtMillis = startedAt))
+        dao.saveTaskAndExecution(
+            task.copy(status = "En ejecución", lastRunAtMillis = startedAt),
+            execution
+        )
 
         try {
             val instruction = task.instructions
@@ -83,22 +85,24 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             val shouldRepeat = task.enabled && task.repeatDays.isNotBlank()
             val nextRunAt = if (shouldRepeat) TaskScheduler.nextWeeklyRun(task, finishedAt) else null
             val nextStatus = if (shouldRepeat) "Recurrente: próxima ejecución programada" else "Completada"
-            dao.update(task.copy(
-                enabled = shouldRepeat,
-                status = nextStatus,
-                scheduleAtMillis = nextRunAt ?: task.scheduleAtMillis,
-                lastRunAtMillis = startedAt,
-                lastResult = resultText
-            ))
-            dao.upsertExecution(execution.copy(
-                status = "Completada",
-                finishedAtMillis = finishedAt,
-                durationMillis = (finishedAt - startedAt).coerceAtLeast(0L),
-                provider = provider,
-                result = resultText,
-                error = null,
-                sourceCount = hits.size
-            ))
+            dao.saveTaskAndExecution(
+                task.copy(
+                    enabled = shouldRepeat,
+                    status = nextStatus,
+                    scheduleAtMillis = nextRunAt ?: task.scheduleAtMillis,
+                    lastRunAtMillis = startedAt,
+                    lastResult = resultText
+                ),
+                execution.copy(
+                    status = "Completada",
+                    finishedAtMillis = finishedAt,
+                    durationMillis = (finishedAt - startedAt).coerceAtLeast(0L),
+                    provider = provider,
+                    result = resultText,
+                    error = null,
+                    sourceCount = hits.size
+                )
+            )
             showNotification(task.title, "La tarea terminó. Revisá el resultado en Fénix Tareas.")
             if (nextRunAt != null) {
                 TaskScheduler.enqueue(
@@ -130,24 +134,28 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             val retryable = listOf("http 429", "http 5", "timeout", "timed out", "connect", "network", "socket", "rate limit", "503", "502", "504", "cola", "dns").any { message.contains(it) }
             if (retryable && runAttemptCount < 2) {
                 val retryStatus = "Reintentando automáticamente (${runAttemptCount + 1}/3)"
-                dao.update(task.copy(status = retryStatus, lastRunAtMillis = startedAt, lastResult = "$errorText\n\nFénix volverá a intentarlo por tratarse de un posible fallo temporal."))
-                dao.upsertExecution(execution.copy(
-                    status = "Reintentando",
-                    attemptCount = runAttemptCount + 1,
-                    error = errorText,
-                    finishedAtMillis = null,
-                    durationMillis = null
-                ))
+                dao.saveTaskAndExecution(
+                    task.copy(status = retryStatus, lastRunAtMillis = startedAt, lastResult = "$errorText\n\nFénix volverá a intentarlo por tratarse de un posible fallo temporal."),
+                    execution.copy(
+                        status = "Reintentando",
+                        attemptCount = runAttemptCount + 1,
+                        error = errorText,
+                        finishedAtMillis = null,
+                        durationMillis = null
+                    )
+                )
                 Result.retry()
             } else {
-                dao.update(task.copy(enabled = task.enabled && task.repeatDays.isNotBlank(), status = "Error", lastRunAtMillis = startedAt, lastResult = errorText))
-                dao.upsertExecution(execution.copy(
-                    status = "Error",
-                    finishedAtMillis = finishedAt,
-                    durationMillis = (finishedAt - startedAt).coerceAtLeast(0L),
-                    attemptCount = runAttemptCount + 1,
-                    error = errorText
-                ))
+                dao.saveTaskAndExecution(
+                    task.copy(enabled = task.enabled && task.repeatDays.isNotBlank(), status = "Error", lastRunAtMillis = startedAt, lastResult = errorText),
+                    execution.copy(
+                        status = "Error",
+                        finishedAtMillis = finishedAt,
+                        durationMillis = (finishedAt - startedAt).coerceAtLeast(0L),
+                        attemptCount = runAttemptCount + 1,
+                        error = errorText
+                    )
+                )
                 showNotification(task.title, "La tarea falló. Revisá el detalle en Resultados.")
                 Result.failure()
             }
