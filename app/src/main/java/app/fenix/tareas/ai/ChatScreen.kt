@@ -1,5 +1,7 @@
 package app.fenix.tareas.ai
 
+import android.content.Intent
+import android.provider.AlarmClock
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -60,7 +62,31 @@ fun ChatScreen() {
                     try {
                         val lower = prompt.lowercase()
                         val answer: Pair<String, String>
-                        if (listOf("investig", "buscá", "busca en la web", "fuentes", "noticias").any { lower.contains(it) }) {
+                        if (lower.contains("alarma") || lower.contains("despertador")) {
+                            val match = Regex("""(?:a las|para las|las)\\s+(\\d{1,2})(?::(\\d{2}))?""").find(lower)
+                            if (match == null) {
+                                answer = "Decime la hora, por ejemplo: “poné una alarma a las 7:30”." to "Skill de alarmas"
+                            } else {
+                                val hour = match.groupValues[1].toIntOrNull() ?: -1
+                                val minute = match.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }?.toIntOrNull() ?: 0
+                                if (hour !in 0..23 || minute !in 0..59) {
+                                    answer = "La hora no es válida. Usá formato de 24 horas, por ejemplo 19:30." to "Skill de alarmas"
+                                } else {
+                                    try {
+                                        val alarm = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                                            putExtra(AlarmClock.EXTRA_HOUR, hour)
+                                            putExtra(AlarmClock.EXTRA_MINUTES, minute)
+                                            putExtra(AlarmClock.EXTRA_MESSAGE, prompt)
+                                            putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+                                        }
+                                        context.startActivity(alarm)
+                                        answer = "Abrí la aplicación de reloj para confirmar la alarma de %02d:%02d. La alarma queda sujeta a la confirmación del sistema.".format(hour, minute) to "Skill de alarmas"
+                                    } catch (_: Exception) {
+                                        answer = "No encontré una aplicación de reloj compatible para crear la alarma." to "Skill de alarmas"
+                                    }
+                                }
+                            }
+                        } else if (listOf("investig", "buscá", "busca en la web", "fuentes", "noticias").any { lower.contains(it) }) {
                             val hits = WebResearch.search(prompt)
                             if (hits.isEmpty()) {
                                 answer = client.complete(messages.map { ChatMessage(it.role, it.text) })
