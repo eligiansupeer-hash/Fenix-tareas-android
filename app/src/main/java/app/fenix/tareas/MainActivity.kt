@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.fenix.tareas.data.TaskDatabase
+import app.fenix.tareas.ai.SecureProviderStore
 import app.fenix.tareas.data.TaskEntity
 import app.fenix.tareas.scheduler.TaskScheduler
 import kotlinx.coroutines.launch
@@ -81,6 +82,9 @@ fun TaskHome() {
     val context = LocalContext.current
     val dao = remember { TaskDatabase.get(context).taskDao() }
     val tasks by dao.observeAll().collectAsState(initial = emptyList())
+    var configuredProviders by remember { mutableStateOf(emptyList<app.fenix.tareas.ai.ProviderConfig>()) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { configuredProviders = SecureProviderStore(context).loadWithCatalog() }
+    val usableProviders = configuredProviders.filter { it.enabled && it.baseUrl.isNotBlank() && it.model.isNotBlank() && (it.noKey || it.apiKeys.any { key -> key.isNotBlank() }) }
     val scope = rememberCoroutineScope()
     var showDialog by remember { mutableStateOf(false) }
     var taskToSchedule by remember { mutableStateOf<TaskEntity?>(null) }
@@ -99,7 +103,7 @@ fun TaskHome() {
         ) {
             Text("Organizá, ejecutá y programá tus tareas.", style = MaterialTheme.typography.bodyLarge)
             Text(
-                "Versión inicial: la ejecución se registra localmente. Las conexiones web e IA todavía no están activas.",
+                "${if (usableProviders.isEmpty()) "IA: no hay proveedores listos. Entrá en «IA y API» para configurar uno." else "Proveedores configurados: ${usableProviders.joinToString { it.name }}. Las tareas los usarán al ejecutarse; los fallos se guardan en Resultados."}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
