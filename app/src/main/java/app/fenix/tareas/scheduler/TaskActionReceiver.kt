@@ -22,6 +22,8 @@ class TaskActionReceiver : BroadcastReceiver() {
                 val task = dao.findById(taskId) ?: return@launch
                 dao.update(task.copy(status = "En cola", lastResult = task.lastResult))
                 TaskScheduler.enqueue(appContext, taskId)
+            } catch (_: Exception) {
+                // A notification action must not crash the process if the database or scheduler is unavailable.
             } finally {
                 pendingResult.finish()
             }
