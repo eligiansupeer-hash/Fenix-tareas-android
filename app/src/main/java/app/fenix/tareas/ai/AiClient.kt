@@ -53,6 +53,39 @@ class AiClient(private val store: SecureProviderStore) {
         throw IllegalStateException("Ningún proveedor respondió. " + failures.joinToString("; "))
     }
 
+    suspend fun testProvider(provider: ProviderConfig): String = withContext(Dispatchers.IO) {
+        if (provider.baseUrl.isBlank() || provider.model.isBlank()) {
+            throw IllegalArgumentException("Completá la URL base y el modelo antes de probar.")
+        }
+        val capabilities = ProviderCapabilities.forProvider(provider)
+        val credentials = if (!capabilities.requiresApiKey) listOf("") else provider.apiKeys.filter { it.isNotBlank() }
+        if (credentials.isEmpty()) throw IllegalArgumentException("Este proveedor requiere al menos una API key.")
+        val startedAt = System.currentTimeMillis()
+        var lastError = "respuesta vacía"
+        for (credential in credentials.take(10)) {
+            try {
+                val response = when (capabilities.protocol) {
+                    ProviderProtocol.AI_HORDE_ASYNC -> callAiHorde(provider, listOf(ChatMessage("user", "Respondé únicamente: OK")))
+                    ProviderProtocol.POLLINATIONS_TEXT -> callPollinations(provider, listOf(ChatMessage("user", "Respondé únicamente: OK")))
+                    ProviderProtocol.OPENAI_CHAT_COMPLETIONS ->
+                        callOpenAiCompatible(provider, listOf(ChatMessage("user", "Respondé únicamente: OK")), credential.takeIf { it.isNotBlank() })
+                }
+                if (response.isNotBlank()) {
+                    val latency = System.currentTimeMillis() - startedAt
+                    providerHealth.recordSuccess(provider.id, latency)
+                    return@withContext "Conexión correcta con ${provider.name} · ${latency} ms."
+                }
+                lastError = "el proveedor devolvió una respuesta vacía"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                lastError = sanitizeProviderError(e.message ?: e.javaClass.simpleName)
+            }
+        }
+        providerHealth.recordFailure(provider.id)
+        throw IllegalStateException("No respondió ${provider.name}: $lastError")
+    }
+
     private fun sanitizeProviderError(value: String): String = value
         .replace(Regex("(?i)(https?://)[^/@\\s]+@"), "$1[REDACTED]@")
         .replace(Regex("(?i)([?&](?:api[_-]?key|key|token|access_token|password)=)[^&\\s]+"), "$1[REDACTED]")
