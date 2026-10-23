@@ -2,6 +2,7 @@ package app.fenix.tareas
 
 import app.fenix.tareas.ai.WebResearch
 import app.fenix.tareas.ai.SearchHit
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
