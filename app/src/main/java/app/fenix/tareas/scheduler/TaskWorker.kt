@@ -53,6 +53,9 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         )
 
         try {
+            if (task.instructions.length > 4000) {
+                throw IllegalArgumentException("Las instrucciones superan el límite de 4000 caracteres.")
+            }
             if (task.workflowSteps.isNotBlank()) {
                 val workflow = TaskWorkflowExecutor(applicationContext, dao).execute(task, execution)
                 val finishedAt = System.currentTimeMillis()
