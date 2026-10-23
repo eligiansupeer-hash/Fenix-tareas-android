@@ -187,7 +187,7 @@ object WebResearch {
         return try {
             if (looksLikeIpv4) {
                 val parts = host.split(".")
-                if (parts.size != 4 || parts.any { it.toIntOrNull() !in 0..255 }) null
+                if (parts.size != 4 || parts.any { part -> part.toIntOrNull()?.let { it !in 0..255 } != false }) null
                 else InetAddress.getByName(host)
             } else InetAddress.getByName(host)
         } catch (_: Exception) { null }
