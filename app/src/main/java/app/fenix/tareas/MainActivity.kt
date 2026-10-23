@@ -122,6 +122,12 @@ fun TaskHome() {
                                 }
                             },
                             onSchedule = { taskToSchedule = task },
+                            onCancel = {
+                                scope.launch {
+                                    TaskScheduler.cancel(context, task.id)
+                                    dao.update(task.copy(enabled = false, status = "Cancelada"))
+                                }
+                            },
                             onDelete = {
                                 scope.launch {
                                     TaskScheduler.cancel(context, task.id)
@@ -172,7 +178,7 @@ fun TaskHome() {
 }
 
 @Composable
-private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit, onDelete: () -> Unit) {
+private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit, onCancel: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors()
@@ -191,6 +197,9 @@ private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit
                     Icon(Icons.Default.Schedule, contentDescription = null)
                     Text("Programar")
                 }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onCancel) { Text("Detener / cancelar horario") }
                 OutlinedButton(onClick = onDelete) { Text("Eliminar") }
             }
         }
@@ -201,11 +210,54 @@ private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit
 private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String) -> Unit) {
     var title by remember { mutableStateOf("") }
     var instructions by remember { mutableStateOf("") }
+    var showTemplates by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Nueva tarea") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                androidx.compose.foundation.layout.Box {
+                    OutlinedButton(onClick = { showTemplates = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Usar plantilla de tarea")
+                    }
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = showTemplates,
+                        onDismissRequest = { showTemplates = false }
+                    ) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Investigación web con fuentes") },
+                            onClick = {
+                                title = "Investigación: [tema]"
+                                instructions = "Investigá en la web: [tema]. Priorizá fuentes primarias y recientes; contrastá al menos tres fuentes cuando sea posible, separá hechos de inferencias y citá cada afirmación importante con enlaces."
+                                showTemplates = false
+                            }
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Comparar opciones") },
+                            onClick = {
+                                title = "Comparación: [opción A] vs [opción B]"
+                                instructions = "Buscá en la web y compará [opción A] y [opción B] según [criterios]. Incluí ventajas, desventajas, costos o fechas solo si las fuentes los confirman, diferencias importantes, incertidumbres y enlaces."
+                                showTemplates = false
+                            }
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Resumen y plan de acción") },
+                            onClick = {
+                                title = "Resumen y próximos pasos: [tema]"
+                                instructions = "Prepará un resumen claro de [tema], identificá los puntos clave, qué falta saber, riesgos o límites, y terminá con una lista priorizada de acciones concretas. No inventes datos; indicá qué información no está disponible."
+                                showTemplates = false
+                            }
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Seguimiento periódico de novedades") },
+                            onClick = {
+                                title = "Seguimiento: novedades sobre [tema]"
+                                instructions = "Investigá en la web las novedades recientes sobre [tema]. Priorizá publicaciones nuevas y fuentes primarias; indicá la fecha de cada fuente, qué cambió desde el último informe si hay resultados previos, qué sigue sin confirmarse y agregá enlaces. No inventes una comparación si no hay informe anterior."
+                                showTemplates = false
+                            }
+                        )
+                    }
+                }
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
