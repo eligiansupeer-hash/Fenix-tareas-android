@@ -133,10 +133,11 @@ Implementado en la rama `feature/reliable-task-engine`, pendiente de la validaci
 
 - Seguridad web: redirecciones manuales limitadas, validación repetida de URL y comprobaciones DNS defensivas contra destinos locales/privados; pruebas unitarias de rangos especiales.
 - Motor de ejecución: historial por ejecución, actualizaciones Room transaccionales, estados persistentes, reintentos, cancelación y notificaciones con acción de reintento.
-- Historial local: búsqueda, filtros, compartir, borrado individual/global y retención configurable (sin límite, 30 o 90 días), incluyendo la eliminación de la copia del último resultado guardada en la tarea.
-- Evidencia: fuentes numeradas, URL final validada, fecha de publicación cuando la página la expone y marca de consulta; las limitaciones de lectura permanecen visibles.
+- Historial local: búsqueda, filtros por estado y fecha, compartir, borrado individual/global y retención configurable (sin límite, 30 o 90 días), incluyendo la eliminación de la copia del último resultado guardada en la tarea.
+- Evidencia: fuentes numeradas, URL final validada, fecha de publicación cuando la página la expone y marca de consulta; deduplicación por URL normalizada, eliminación de parámetros de seguimiento para comparar duplicados y preferencia por dominios diferentes. Las limitaciones de lectura permanecen visibles.
 - Proveedores: adaptadores declarados por protocolo, prueba de conexión explícita, registro local de éxito/latencia y enfriamiento temporal después de fallos repetidos. No se afirma soporte de tool-calling o JSON estructurado.
-- Flujos encadenados: hasta diez pasos, transferencia del resultado previo al paso siguiente y checkpoints persistidos para reanudar un reintento.
+- Flujos encadenados: hasta diez pasos, transferencia del resultado previo al paso siguiente, comparación explícita con el informe previo en tareas recurrentes, límites de longitud de instrucciones/pasos/respuestas y checkpoints persistidos para reanudar un reintento.
+- Límites de respuesta de proveedores: se rechazan respuestas de texto mayores a 100.000 caracteres y respuestas JSON mayores a 500.000 caracteres para reducir riesgo de consumo excesivo de memoria.
 
 Pendiente antes de declarar la entrega completa:
 
