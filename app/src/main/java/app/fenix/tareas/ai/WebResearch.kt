@@ -44,7 +44,7 @@ object WebResearch {
     suspend fun search(query: String): List<SearchHit> = withContext(Dispatchers.IO) {
         val hits = try { searchDuckDuckGo(query) } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
         val results = if (hits.isNotEmpty()) hits else try { searchWikipedia(query) } catch (e: CancellationException) { throw e } catch (_: Exception) { emptyList() }
-        results.take(MAX_PAGES_TO_READ).map { hit ->
+        selectDiverseResults(results).map { hit ->
             val page = try { readPublicPage(hit.url) } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
             if (page == null) hit else hit.copy(
                 url = page.finalUrl,
@@ -67,8 +67,42 @@ object WebResearch {
             val title = link.text().trim()
             val snippet = result.selectFirst(".result__snippet")?.text()?.trim().orEmpty()
             if (title.isBlank() || !isPublicWebUrl(href)) null else SearchHit(title, href, snippet)
-        }.distinctBy { it.url }.take(8)
+        }.distinctBy { canonicalUrlKey(it.url) }.take(12)
     }
+
+    /** Prioritize distinct domains, then fill remaining slots without excluding useful same-domain results. */
+    internal fun selectDiverseResults(results: List<SearchHit>): List<SearchHit> {
+        val unique = results.distinctBy { canonicalUrlKey(it.url) }
+        val selected = unique.distinctBy { it.sourceHost }.take(MAX_PAGES_TO_READ).toMutableList()
+        if (selected.size < MAX_PAGES_TO_READ) {
+            unique.filterNot { hit -> selected.any { canonicalUrlKey(it.url) == canonicalUrlKey(hit.url) } }
+                .take(MAX_PAGES_TO_READ - selected.size)
+                .forEach(selected::add)
+        }
+        return selected
+    }
+
+    /** Remove fragments and common tracking parameters only for duplicate detection, not source display. */
+    internal fun canonicalUrlKey(rawUrl: String): String = try {
+        val uri = URI(rawUrl).normalize()
+        val query = uri.rawQuery.orEmpty().split("&")
+            .filter { it.isNotBlank() }
+            .filterNot {
+                val key = it.substringBefore("=").lowercase(Locale.ROOT)
+                key.startsWith("utm_") || key in setOf("fbclid", "gclid", "dclid", "mc_cid", "mc_eid")
+            }
+            .sorted()
+            .joinToString("&")
+        URI(
+            uri.scheme.lowercase(Locale.ROOT),
+            null,
+            uri.host.lowercase(Locale.ROOT),
+            if (uri.port == (if (uri.scheme.equals("https", true)) 443 else 80)) -1 else uri.port,
+            uri.path.ifBlank { "/" },
+            query.ifBlank { null },
+            null
+        ).toASCIIString().removeSuffix("/")
+    } catch (_: Exception) { rawUrl.substringBefore("#") }
 
     /** Key-free fallback when the primary HTML search endpoint is unavailable or blocked. */
     private fun searchWikipedia(query: String): List<SearchHit> {
