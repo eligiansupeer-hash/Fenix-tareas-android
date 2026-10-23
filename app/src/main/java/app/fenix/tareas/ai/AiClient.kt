@@ -34,6 +34,7 @@ class AiClient(private val store: SecureProviderStore) {
                     val response = when (capabilities.protocol) {
                         ProviderProtocol.AI_HORDE_ASYNC -> callAiHorde(provider, messages)
                         ProviderProtocol.POLLINATIONS_TEXT -> callPollinations(provider, messages)
+                        ProviderProtocol.ANTHROPIC_MESSAGES -> callAnthropic(provider, messages, credential)
                         ProviderProtocol.OPENAI_CHAT_COMPLETIONS ->
                             callOpenAiCompatible(provider, messages, credential.takeIf { it.isNotBlank() })
                     }
@@ -67,6 +68,7 @@ class AiClient(private val store: SecureProviderStore) {
                 val response = when (capabilities.protocol) {
                     ProviderProtocol.AI_HORDE_ASYNC -> callAiHorde(provider, listOf(ChatMessage("user", "Respondé únicamente: OK")))
                     ProviderProtocol.POLLINATIONS_TEXT -> callPollinations(provider, listOf(ChatMessage("user", "Respondé únicamente: OK")))
+                    ProviderProtocol.ANTHROPIC_MESSAGES -> callAnthropic(provider, listOf(ChatMessage("user", "Respondé únicamente: OK")), credential)
                     ProviderProtocol.OPENAI_CHAT_COMPLETIONS ->
                         callOpenAiCompatible(provider, listOf(ChatMessage("user", "Respondé únicamente: OK")), credential.takeIf { it.isNotBlank() })
                 }
@@ -124,6 +126,43 @@ class AiClient(private val store: SecureProviderStore) {
             val code = connection.responseCode
             if (code !in 200..299) throw IllegalStateException("HTTP $code")
             return readBounded(connection.inputStream, MAX_TEXT_RESPONSE_CHARS).trim()
+        } finally { connection.disconnect() }
+    }
+
+    /** Native Anthropic Messages API adapter; Anthropic is not OpenAI-compatible. */
+    private fun callAnthropic(provider: ProviderConfig, messages: List<ChatMessage>, credential: String): String {
+        val base = provider.baseUrl.trimEnd('/')
+        val endpoint = if (base.endsWith("/v1")) "$base/messages" else "$base/v1/messages"
+        val system = messages.filter { it.role == "system" }.joinToString("\n\n") { it.content }
+        val userMessages = messages.filter { it.role != "system" }.map {
+            JSONObject().put("role", if (it.role == "assistant") "assistant" else "user")
+                .put("content", it.content)
+        }
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; connectTimeout = 12000; readTimeout = 45000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("x-api-key", credential)
+            setRequestProperty("anthropic-version", "2023-06-01")
+        }
+        try {
+            val body = JSONObject()
+                .put("model", provider.model)
+                .put("max_tokens", 2048)
+                .put("messages", JSONArray().apply { userMessages.forEach { put(it) } })
+            if (system.isNotBlank()) body.put("system", system)
+            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                val stream = connection.errorStream ?: throw IllegalStateException("Anthropic HTTP $code")
+                val error = readBounded(stream, 12000)
+                throw IllegalStateException("Anthropic HTTP $code: $error")
+            }
+            val response = JSONObject(readBounded(connection.inputStream, MAX_JSON_RESPONSE_CHARS))
+            val content = response.optJSONArray("content") ?: JSONArray()
+            return (0 until content.length()).mapNotNull { i ->
+                content.optJSONObject(i)?.takeIf { it.optString("type") == "text" }?.optString("text")
+            }.joinToString("\n").trim()
         } finally { connection.disconnect() }
     }
 
