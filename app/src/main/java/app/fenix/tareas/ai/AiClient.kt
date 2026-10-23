@@ -91,6 +91,27 @@ class AiClient(private val store: SecureProviderStore) {
         .replace(Regex("(?i)([?&](?:api[_-]?key|key|token|access_token|password)=)[^&\\s]+"), "$1[REDACTED]")
         .take(500)
 
+    private fun readBounded(input: java.io.InputStream, maxChars: Int): String {
+        val output = StringBuilder(minOf(maxChars, 8192))
+        input.bufferedReader(Charsets.UTF_8).use { reader ->
+            val buffer = CharArray(8192)
+            while (true) {
+                val count = reader.read(buffer)
+                if (count < 0) break
+                if (output.length + count > maxChars) {
+                    throw IllegalStateException("La respuesta del proveedor supera el límite de $maxChars caracteres.")
+                }
+                output.append(buffer, 0, count)
+            }
+        }
+        return output.toString()
+    }
+
+    private companion object {
+        const val MAX_TEXT_RESPONSE_CHARS = 100_000
+        const val MAX_JSON_RESPONSE_CHARS = 500_000
+    }
+
     private fun callPollinations(provider: ProviderConfig, messages: List<ChatMessage>): String {
         val prompt = messages.joinToString("\n\n") { "${it.role}: ${it.content}" }
         val endpoint = provider.baseUrl.trimEnd('/') + "/" + URLEncoder.encode(prompt, "UTF-8") +
@@ -102,7 +123,7 @@ class AiClient(private val store: SecureProviderStore) {
         try {
             val code = connection.responseCode
             if (code !in 200..299) throw IllegalStateException("HTTP $code")
-            return connection.inputStream.bufferedReader().use { it.readText() }.trim()
+            return readBounded(connection.inputStream, MAX_TEXT_RESPONSE_CHARS).trim()
         } finally { connection.disconnect() }
     }
 
@@ -121,7 +142,7 @@ class AiClient(private val store: SecureProviderStore) {
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
             if (code !in 200..299) throw IllegalStateException("HTTP $code")
-            val response = connection.inputStream.bufferedReader().use { it.readText() }
+            val response = readBounded(connection.inputStream, MAX_JSON_RESPONSE_CHARS)
             return JSONObject(response).getJSONArray("choices").getJSONObject(0)
                 .getJSONObject("message").getString("content").trim()
         } finally { connection.disconnect() }
@@ -146,7 +167,7 @@ class AiClient(private val store: SecureProviderStore) {
             start.outputStream.use { it.write(request.toString().toByteArray(Charsets.UTF_8)) }
             val code = start.responseCode
             if (code !in 200..299) throw IllegalStateException("AI Horde HTTP $code")
-            id = JSONObject(start.inputStream.bufferedReader().use { it.readText() }).optString("id")
+            id = JSONObject(readBounded(start.inputStream, MAX_JSON_RESPONSE_CHARS)).optString("id")
             if (id.isBlank()) throw IllegalStateException("AI Horde no devolvió ID de generación")
         } finally { start.disconnect() }
 
@@ -160,7 +181,7 @@ class AiClient(private val store: SecureProviderStore) {
             try {
                 val code = poll.responseCode
                 if (code !in 200..299) throw IllegalStateException("AI Horde status HTTP $code")
-                val json = JSONObject(poll.inputStream.bufferedReader().use { it.readText() })
+                val json = JSONObject(readBounded(poll.inputStream, MAX_JSON_RESPONSE_CHARS))
                 if (json.optBoolean("faulted", false)) throw IllegalStateException("AI Horde falló la generación")
                 if (json.optBoolean("done", false)) {
                     val generations = json.optJSONArray("generations")
