@@ -158,6 +158,11 @@ class TaskWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
             Result.success()
         } catch (e: CancellationException) {
             withContext(NonCancellable + Dispatchers.IO) {
+                val currentTask = dao.findById(taskId)
+                if (currentTask != null && currentTask.status in listOf("En ejecución", "En cola") ||
+                    currentTask != null && currentTask.status.startsWith("Reintentando")) {
+                    dao.update(currentTask.copy(enabled = false, status = "Cancelada"))
+                }
                 val finishedAt = System.currentTimeMillis()
                 val current = dao.findExecution(executionId)
                 if (current != null && current.status !in listOf("Completada", "Error", "Cancelada")) {
