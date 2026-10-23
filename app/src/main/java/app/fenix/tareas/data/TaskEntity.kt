@@ -11,5 +11,8 @@ data class TaskEntity(
     val status: String = "Pendiente",
     val lastRunAtMillis: Long? = null,
     val lastResult: String? = null,
-    val createdAtMillis: Long = System.currentTimeMillis()
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val repeatDays: String = "",
+    val scheduleHour: Int? = null,
+    val scheduleMinute: Int? = null
 )
