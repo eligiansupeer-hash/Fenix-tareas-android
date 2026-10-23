@@ -146,3 +146,93 @@ Pendiente antes de declarar la entrega completa:
 - Probar de forma controlada redirecciones web inseguras y contenido que intente inyectar instrucciones.
 - Revisar límites de memoria, tamaño de informes y comportamiento ante interrupciones durante cada paso del flujo.
 - La ejecución de flujos por ahora encadena investigación y generación de texto; no ejecuta acciones externas sensibles ni comandos del sistema.
+
+
+## Fase 10 — Protocolo Deep Research iterativo
+
+Objetivo: pasar de una búsqueda limitada con síntesis a un proceso de investigación controlado, trazable y evaluable.
+
+- Convertir la pregunta en un plan con subpreguntas, alcance, criterios de inclusión/exclusión, actualidad necesaria y presupuesto de investigación.
+- Ejecutar rondas de búsqueda adaptativas: buscar, evaluar cobertura, detectar vacíos y contradicciones, y volver a buscar cuando exista una pregunta pendiente relevante.
+- Separar resultados de búsqueda, páginas intentadas, páginas leídas íntegramente, páginas parcialmente leídas y errores de extracción.
+- Incorporar adaptadores de fuentes especializadas cuando sean pertinentes: documentación técnica, repositorios de código, Crossref, OpenAlex, arXiv, PubMed/Europe PMC y Semantic Scholar, respetando sus condiciones y límites.
+- Evaluar procedencia, fecha, autoría, tipo de fuente, independencia aparente, metodología y condición de fuente primaria o secundaria. No tratar métricas de popularidad como prueba de verdad.
+- Crear un registro de evidencia con identificadores estables. Vincular cada afirmación sustantiva del informe con una o más evidencias recuperadas; etiquetar inferencias, incertidumbres y afirmaciones no corroboradas.
+- Detectar contradicciones y solicitar búsqueda adicional cuando la evidencia sea insuficiente. No declarar verificación automática si solo se pidió al mismo modelo que revise su respuesta.
+- Producir informe con alcance, fecha de corte, método, hallazgos, fuentes, desacuerdos, limitaciones, vacíos y preguntas abiertas.
+- Presupuestos configurables por perfil (rápido, estándar, profundo y extendido): consultas, páginas, tiempo, tokens/costo cuando se conozcan, bytes descargados y rondas máximas. Los valores son límites de ejecución, no garantías de cobertura.
+- Cachear resultados reutilizables con fecha y política de caducidad; las tareas periódicas deben buscar cambios nuevos y comparar evidencias, no solo comparar prosa generada.
+- Mantener protección contra prompt injection: el contenido de fuentes es dato no confiable; nunca concede permisos ni autoriza herramientas por sí mismo.
+
+Criterios de salida:
+- Pruebas con preguntas de referencia y fuentes esperadas; medir cobertura de subpreguntas, exactitud de citas, afirmaciones sin soporte, diversidad y actualidad de fuentes, contradicciones detectadas, fallos de extracción, tiempo y consumo.
+- Cada cita debe resolver a una fuente realmente recuperada y a un fragmento o registro que respalde la afirmación.
+- El informe declara qué se examinó y qué no; no utiliza la etiqueta Deep Research como promesa de exhaustividad si no se satisfacen criterios definidos.
+
+## Fase 11 — Catálogo de conectores personales y autorización granular
+
+Diseñar una sección de Conectores en la aplicación, similar al patrón de un catálogo de integraciones: catálogo, descripción, estado conectado/desconectado, capacidades, permisos concedidos, prueba de conexión, revocación y registro de actividad.
+
+- Separar conectores de solo lectura de conectores con capacidad de escritura/ejecución.
+- Solicitar únicamente permisos mínimos, preferentemente OAuth o autorización oficial del proveedor. Permitir seleccionar repositorios, espacios de trabajo y recursos cuando el proveedor lo soporte.
+- Mostrar antes de autorizar qué datos podrá leer la IA y qué acciones podrá realizar. Solicitar confirmación explícita para operaciones sensibles, destructivas, financieras, publicaciones externas o cambios de permisos.
+- Guardar tokens y secretos cifrados; nunca incluirlos en prompts, logs, informes ni almacenamiento público. Preferir un almacén de secretos de backend cuando el conector deba ejecutarse en la nube. Implementar renovación, expiración, revocación y manejo de errores de autorización.
+- No asumir que tener un login gratuito significa que una API es gratuita, ilimitada o disponible. Cada conector tendrá matriz de autenticación, coste, cuota, alcance, límites y política de datos.
+- Conectores potenciales iniciales: GitHub; Supabase; Cloudflare; Context7; Jules cuando exista un método de integración documentado y autorizado; proveedores de almacenamiento/documentos; calendario/correo/tareas; gestores de proyectos; comunicación; fuentes académicas; RSS y servicios públicos.
+- Jules debe tratarse como un agente externo de programación, no como un conector genérico de ejecución. Su integración requiere confirmar API/CLI oficial, autenticación, límites, retorno de estado y aprobación de cambios antes de incorporarla.
+- Context7 se clasifica principalmente como recuperación de documentación técnica, no como conector para modificar sistemas.
+- Las APIs académicas abiertas sin cuenta, como Crossref, y servicios con claves gratuitas, como OpenAlex, pueden incorporarse como fuentes de investigación; confirmar las condiciones y cuotas actuales en la implementación.
+
+Criterios de salida:
+- Matriz pública por conector: lectura/escritura, autenticación, scopes, necesidad de tarjeta, cuotas gratuitas verificadas, datos transmitidos, límites y permisos.
+- Pruebas de autorización insuficiente, token expirado/revocado, fallo de proveedor, revocación desde la interfaz y ausencia de secretos en logs.
+- Ningún conector se activa ni recibe permisos por el solo hecho de que la IA lo recomiende.
+
+## Fase 12 — Orquestación opcional de tareas en la nube
+
+Objetivo: permitir que una tarea siga avanzando con la aplicación cerrada y que los resultados se sincronicen al recuperar conectividad, sin convertir la nube en requisito para Fénix Lite.
+
+Arquitectura propuesta:
+1. La app valida la tarea, muestra el plan, selecciona conectores y solicita autorización para cualquier acción que lo requiera.
+2. Si el usuario conecta un backend propio (por ejemplo Supabase o Cloudflare), Fénix despliega/configura solo los componentes necesarios mediante un flujo explícito y revisable; nunca crea recursos, consume cuotas o habilita facturación sin autorización.
+3. Un registro de trabajos guarda estado, programación, siguiente intento, presupuesto, permisos, checkpoints y claves de idempotencia. Los secretos no se guardan en el contenido del trabajo.
+4. Un scheduler/cron despierta el despachador. El despachador reclama trabajos con bloqueo/lease, comprueba autorización y presupuesto, y los entrega a un worker.
+5. El worker ejecuta pasos acotados, persiste checkpoints, aplica backoff y límites, y puede reanudar tras fallos. Webhooks se validan criptográficamente cuando existan.
+6. Los resultados se guardan de forma segura y se sincronizan con la app al reconectarse. La app muestra última sincronización, estado, errores y consumo.
+7. Un mecanismo de cancelación y revocación detiene futuros pasos cuando sea posible y bloquea nuevas llamadas al conector. Los pasos ya enviados a un servicio externo pueden no ser reversibles.
+
+- Supabase puede servir como base de datos, autenticación, almacenamiento y Edge Functions dentro de las cuotas del plan elegido; sus proyectos gratuitos pueden pausarse por inactividad.
+- Cloudflare Workers/Cron puede servir como scheduler y ejecución ligera dentro de sus límites de CPU, memoria, subrequests y cron; no es una máquina virtual persistente ni sirve para cualquier trabajo largo.
+- Usar colas o almacenamiento duradero cuando el trabajo requiera reintentos fiables. Un cron no debe ser la cola ni ejecutar directamente una investigación extensa en una única invocación.
+- Separar plano de control (estado, permisos, cron) de plano de ejecución (investigación/modelo/conectores). Permitir elegir backend propio y ofrecer modo local cuando no haya backend.
+- Las claves de modelos y tokens de conectores deben permanecer en secretos del backend cuando el trabajo se ejecute en nube. Nunca pedir al usuario que pegue secretos en instrucciones del modelo.
+- El plan debe ser utilizable con cuentas gratuitas cuando el proveedor lo permita, sin requerir tarjeta para el flujo gratuito; documentar cualquier excepción. Las cuotas gratuitas pueden cambiar, agotarse o pausarse.
+- Respetar restricciones de conectividad móvil: la app no necesita permanecer abierta; sí necesita conexión para sincronizar, y el backend necesita acceso a Internet para consultar servicios externos. Si el teléfono no tiene datos, el trabajo cloud puede continuar, pero no puede entregar actualizaciones al dispositivo hasta que vuelva a conectarse.
+- Diseñar límites por trabajo, cuotas diarias, timeout, número de pasos, tamaño de resultado, retención, protección contra loops y alertas de presupuesto. No habilitar gasto de pago automáticamente.
+
+Criterios de salida:
+- Demostrar ejecución con la app cerrada, reintento tras error, idempotencia, recuperación de checkpoint, cancelación, token revocado, sincronización tardía y agotamiento de cuota.
+- Documentar por backend qué queda realmente cubierto por el nivel gratuito y qué requeriría un plan pago.
+- Fénix Lite debe seguir funcionando en modo local/sin backend; las funciones cloud se muestran como opcionales y no se anuncian como disponibles hasta completar configuración y prueba.
+
+## Fase 13 — Acciones reales mediante conectores y control humano
+
+- Cada herramienta publica un contrato tipado con esquema de entrada/salida, capacidades, permisos requeridos, límites, timeout y política de reintento.
+- Clasificar operaciones: lectura; escritura reversible; acción externa sensible; acción destructiva/financiera. Aplicar confirmación acorde al riesgo.
+- Separar la planificación del modelo de la ejecución del conector: el modelo propone una llamada, el motor valida esquema, permiso, alcance, presupuesto y política antes de ejecutarla.
+- Usar claves de idempotencia para evitar duplicar creaciones o envíos durante reintentos. Registrar actor, conector, acción, parámetros no secretos, resultado y marca de tiempo.
+- Aplicar lista permitida de herramientas, aislamiento por usuario, protección CSRF/SSRF, validación de webhook, límites de tasa y auditoría. Nunca ejecutar código arbitrario recibido de una página web.
+- Antes de cambios irreversibles, presentar resumen de la acción y recurso afectado; permitir cancelar y revocar acceso.
+- Los conectores deben tener pruebas de contrato y sandbox/mock para desarrollo; las pruebas reales requieren una cuenta de prueba y autorización explícita.
+
+## Orden de implementación ampliado
+
+1. Completar y validar la rama de estabilidad actual.
+2. Deep Research iterativo con evidencia y presupuesto, primero usando fuentes públicas sin autenticación.
+3. Catálogo de conectores de solo lectura: documentación técnica y fuentes académicas.
+4. Conectores de cuentas personales con OAuth/permisos granulares y pruebas de seguridad.
+5. Backend cloud opcional con registro de trabajos, cola, cron, checkpoints y sincronización.
+6. Conectores de escritura y automatización con confirmación humana, idempotencia y auditoría.
+7. Evaluación comparativa con tareas de referencia y pruebas de operación en dispositivo.
+
+Las fases anteriores son objetivos de arquitectura y no deben interpretarse como funciones ya implementadas. La disponibilidad, coste, necesidad de tarjeta, cuotas y API oficial de cada servicio deben verificarse nuevamente antes de implementar su adaptador.
