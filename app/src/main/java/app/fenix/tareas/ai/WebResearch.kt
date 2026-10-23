@@ -91,7 +91,7 @@ object WebResearch {
     private fun readPublicPage(rawUrl: String): String {
         var currentUrl = rawUrl
         var redirects = 0
-        val finalResponse: Connection.Response
+        var finalResponse: Connection.Response? = null
         while (true) {
             if (!isPublicWebUrl(currentUrl, resolveDns = true)) {
                 throw IOException("Se rechazó una URL no pública o un destino de redirección inseguro.")
@@ -116,7 +116,7 @@ object WebResearch {
             finalResponse = response
             break
         }
-        val document = finalResponse.parse()
+        val document = (finalResponse ?: throw IOException("No se pudo leer la respuesta de la página.")).parse()
         document.select("script,style,nav,footer,header,aside,form,button,iframe,noscript,svg,canvas").remove()
         val main = document.selectFirst("article") ?: document.selectFirst("main") ?: document.body()
         return main?.text().orEmpty()
