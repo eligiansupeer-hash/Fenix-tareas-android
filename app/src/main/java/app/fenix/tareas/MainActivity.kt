@@ -58,12 +58,25 @@ import app.fenix.tareas.scheduler.TaskScheduler
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private var requestedDestination by mutableStateOf(0)
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        requestedDestination = if (intent.getBooleanExtra(EXTRA_OPEN_RESULTS, false)) 3 else 0
+    }
+
+    companion object {
+        const val EXTRA_OPEN_RESULTS = "app.fenix.tareas.OPEN_RESULTS"
+    }
+
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestedDestination = if (intent.getBooleanExtra(EXTRA_OPEN_RESULTS, false)) 3 else 0
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -72,7 +85,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    AppShell()
+                    AppShell(initialDestination = requestedDestination)
                 }
             }
         }
