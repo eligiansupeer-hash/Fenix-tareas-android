@@ -13,8 +13,8 @@ import app.fenix.tareas.ai.AiSettingsScreen
 import app.fenix.tareas.ai.ChatScreen
 
 @Composable
-fun AppShell() {
-    var destination by remember { mutableIntStateOf(0) }
+fun AppShell(initialDestination: Int = 0) {
+    var destination by remember(initialDestination) { mutableIntStateOf(initialDestination) }
     Scaffold(bottomBar = {
         NavigationBar {
             NavigationBarItem(selected = destination == 0, onClick = { destination = 0 },

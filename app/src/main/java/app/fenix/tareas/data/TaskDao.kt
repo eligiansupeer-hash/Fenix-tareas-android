@@ -2,11 +2,58 @@ package app.fenix.tareas.data
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 @Dao
 interface TaskDao {
+    @Query("SELECT * FROM task_executions ORDER BY startedAtMillis DESC")
+    fun observeExecutions(): Flow<List<TaskExecutionEntity>>
+
+    @Query("SELECT * FROM task_executions WHERE executionId = :executionId LIMIT 1")
+    suspend fun findExecution(executionId: String): TaskExecutionEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertExecution(execution: TaskExecutionEntity)
+
+    @Query("DELETE FROM task_executions WHERE executionId = :executionId")
+    suspend fun deleteExecution(executionId: String)
+
+    @Query("DELETE FROM task_executions")
+    suspend fun clearExecutions()
+
+    @Query("DELETE FROM task_executions WHERE startedAtMillis < :cutoffMillis")
+    suspend fun deleteExecutionsBefore(cutoffMillis: Long)
+
+    @Query("UPDATE tasks SET lastResult = NULL WHERE lastRunAtMillis < :cutoffMillis")
+    suspend fun clearTaskResultsBefore(cutoffMillis: Long)
+
+    @Query("UPDATE tasks SET lastResult = NULL")
+    suspend fun clearAllTaskResults()
+
+    @Query("UPDATE tasks SET lastResult = NULL WHERE id = :taskId AND lastRunAtMillis = :runAtMillis")
+    suspend fun clearTaskResultForRun(taskId: Long, runAtMillis: Long)
+
+    @Transaction
+    suspend fun pruneHistoryBefore(cutoffMillis: Long) {
+        deleteExecutionsBefore(cutoffMillis)
+        clearTaskResultsBefore(cutoffMillis)
+    }
+
+    @Transaction
+    suspend fun clearHistoryAndTaskResults() {
+        clearExecutions()
+        clearAllTaskResults()
+    }
+
+    @Transaction
+    suspend fun deleteExecutionAndClearLatestResult(execution: TaskExecutionEntity) {
+        deleteExecution(execution.executionId)
+        clearTaskResultForRun(execution.taskId, execution.startedAtMillis)
+    }
+
     @Query("SELECT * FROM tasks ORDER BY createdAtMillis DESC")
     fun observeAll(): Flow<List<TaskEntity>>
     @Query("SELECT * FROM tasks WHERE id = :id LIMIT 1")
@@ -14,4 +61,10 @@ interface TaskDao {
     @Insert suspend fun insert(task: TaskEntity): Long
     @Update suspend fun update(task: TaskEntity)
     @Delete suspend fun delete(task: TaskEntity)
+
+    @Transaction
+    suspend fun saveTaskAndExecution(task: TaskEntity, execution: TaskExecutionEntity) {
+        update(task)
+        upsertExecution(execution)
+    }
 }

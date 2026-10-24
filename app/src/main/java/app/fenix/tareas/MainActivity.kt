@@ -7,6 +7,9 @@ import android.os.Bundle
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,6 +20,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -55,12 +61,25 @@ import app.fenix.tareas.scheduler.TaskScheduler
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private var requestedDestination by mutableStateOf(0)
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        requestedDestination = if (intent.getBooleanExtra(EXTRA_OPEN_RESULTS, false)) 3 else 0
+    }
+
+    companion object {
+        const val EXTRA_OPEN_RESULTS = "app.fenix.tareas.OPEN_RESULTS"
+    }
+
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestedDestination = if (intent.getBooleanExtra(EXTRA_OPEN_RESULTS, false)) 3 else 0
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -69,7 +88,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    AppShell()
+                    AppShell(initialDestination = requestedDestination)
                 }
             }
         }
@@ -82,6 +101,7 @@ fun TaskHome() {
     val context = LocalContext.current
     val dao = remember { TaskDatabase.get(context).taskDao() }
     val tasks by dao.observeAll().collectAsState(initial = emptyList())
+    val executions by dao.observeExecutions().collectAsState(initial = emptyList())
     var configuredProviders by remember { mutableStateOf(emptyList<app.fenix.tareas.ai.ProviderConfig>()) }
     androidx.compose.runtime.LaunchedEffect(Unit) { configuredProviders = SecureProviderStore(context).loadWithCatalog() }
     val usableProviders = configuredProviders.filter { it.enabled && it.baseUrl.isNotBlank() && it.model.isNotBlank() && (it.noKey || it.apiKeys.any { key -> key.isNotBlank() }) }
@@ -102,6 +122,15 @@ fun TaskHome() {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("Organizá, ejecutá y programá tus tareas.", style = MaterialTheme.typography.bodyLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                SummaryMetric("Activas", tasks.count { (it.status in listOf("En cola", "En ejecución") || it.status.startsWith("Reintentando")) }.toString(), Modifier.weight(1f))
+                SummaryMetric("Completadas", executions.count { it.status == "Completada" }.toString(), Modifier.weight(1f))
+                SummaryMetric("Con error", executions.count { it.status == "Error" }.toString(), Modifier.weight(1f))
+            }
+            tasks.filter { it.enabled && it.scheduleAtMillis != null }
+                .minByOrNull { it.scheduleAtMillis ?: Long.MAX_VALUE }?.let { next ->
+                    Text("Próxima ejecución estimada: ${next.title} · ${formatScheduleTime(next.scheduleAtMillis!!)}", style = MaterialTheme.typography.bodySmall)
+                }
             Text(
                 "${if (usableProviders.isEmpty()) "IA: no hay proveedores listos. Entrá en «IA y API» para configurar uno." else "Proveedores configurados: ${usableProviders.joinToString { it.name }}. Las tareas los usarán al ejecutarse; los fallos se guardan en Resultados."}",
                 style = MaterialTheme.typography.bodySmall,
@@ -167,15 +196,29 @@ fun TaskHome() {
     if (showDialog) {
         NewTaskDialog(
             onDismiss = { showDialog = false },
-            onCreate = { title, instructions ->
+            onCreate = { title, instructions, workflowSteps ->
                 scope.launch {
-                    dao.insert(TaskEntity(title = title, instructions = instructions))
+                    dao.insert(TaskEntity(title = title, instructions = instructions, workflowSteps = workflowSteps))
                     showDialog = false
                 }
             }
         )
     }
 }
+
+
+@Composable
+private fun SummaryMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(modifier) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(value, style = MaterialTheme.typography.titleLarge)
+            Text(label, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+private fun formatScheduleTime(millis: Long): String =
+    SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(millis))
 
 @Composable
 private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit, onCancel: () -> Unit, onDelete: () -> Unit) {
@@ -187,6 +230,9 @@ private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit
             Text(task.title, style = MaterialTheme.typography.titleMedium)
             Text(task.instructions, style = MaterialTheme.typography.bodyMedium)
             Text("Estado: ${task.status}", style = MaterialTheme.typography.labelMedium)
+            if (task.enabled && task.scheduleAtMillis != null) {
+                Text("Próxima ejecución: ${formatScheduleTime(task.scheduleAtMillis)}", style = MaterialTheme.typography.bodySmall)
+            }
             task.lastResult?.let { Text("Último resultado: $it", style = MaterialTheme.typography.bodySmall) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onRun) {
@@ -199,7 +245,10 @@ private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onCancel) { Text("Detener / cancelar horario") }
+                OutlinedButton(
+                    onClick = onCancel,
+                    enabled = task.enabled || task.status in listOf("En cola", "En ejecución") || task.status.startsWith("Reintentando")
+                ) { Text(if (task.enabled) "Cancelar horario" else "Detener ejecución") }
                 OutlinedButton(onClick = onDelete) { Text("Eliminar") }
             }
         }
@@ -207,15 +256,18 @@ private fun TaskCard(task: TaskEntity, onRun: () -> Unit, onSchedule: () -> Unit
 }
 
 @Composable
-private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String) -> Unit) {
+private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String, String) -> Unit) {
     var title by remember { mutableStateOf("") }
     var instructions by remember { mutableStateOf("") }
+    var workflowSteps by remember { mutableStateOf("") }
     var showTemplates by remember { mutableStateOf(false) }
+    val workflowLines = workflowSteps.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.toList()
+    val workflowValid = workflowSteps.isBlank() || (workflowLines.size in 1..10 && workflowLines.all { it.length <= 300 })
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Nueva tarea") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 androidx.compose.foundation.layout.Box {
                     OutlinedButton(onClick = { showTemplates = true }, modifier = Modifier.fillMaxWidth()) {
                         Text("Usar plantilla de tarea")
@@ -249,6 +301,15 @@ private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String) -> U
                             }
                         )
                         androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Flujo de pasos encadenados") },
+                            onClick = {
+                                title = "Flujo: [objetivo]"
+                                instructions = "Objetivo general: [describí el resultado final esperado]. Usá la salida de cada paso como contexto del siguiente y señalá cualquier limitación."
+                                workflowSteps = "Investigar el tema y reunir fuentes confiables\nComparar la evidencia y detectar contradicciones\nPreparar un informe final con conclusiones y enlaces"
+                                showTemplates = false
+                            }
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
                             text = { Text("Seguimiento periódico de novedades") },
                             onClick = {
                                 title = "Seguimiento: novedades sobre [tema]"
@@ -260,24 +321,36 @@ private fun NewTaskDialog(onDismiss: () -> Unit, onCreate: (String, String) -> U
                 }
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = { title = it.take(120) },
                     label = { Text("Nombre") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = instructions,
-                    onValueChange = { instructions = it },
+                    onValueChange = { instructions = it.take(4000) },
                     label = { Text("Qué debe hacer") },
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = workflowSteps,
+                    onValueChange = { workflowSteps = it.take(3500) },
+                    label = { Text("Pasos encadenados (opcional)") },
+                    placeholder = { Text("Un paso por línea, en orden. Máximo 10 pasos.") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("Si completás los pasos, Fénix ejecutará cada uno en orden y pasará los resultados anteriores al siguiente.", style = MaterialTheme.typography.bodySmall)
+                if (!workflowValid) {
+                    Text("El flujo debe tener entre 1 y 10 pasos no vacíos; cada paso admite hasta 300 caracteres.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onCreate(title.trim(), instructions.trim()) },
-                enabled = title.isNotBlank() && instructions.isNotBlank()
+                onClick = { onCreate(title.trim(), instructions.trim(), workflowSteps.trim()) },
+                enabled = title.isNotBlank() && instructions.isNotBlank() && workflowValid
             ) { Text("Crear") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancelar") } }

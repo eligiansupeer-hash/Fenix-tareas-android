@@ -1,6 +1,8 @@
 package app.fenix.tareas.ai
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -11,32 +13,105 @@ import java.net.URL
 data class ChatMessage(val role: String, val content: String)
 
 class AiClient(private val store: SecureProviderStore) {
+    private val providerHealth = ProviderHealthStore(store.appContext)
+
     suspend fun complete(messages: List<ChatMessage>): Pair<String, String> = withContext(Dispatchers.IO) {
-        val providers = store.loadWithCatalog().filter { it.enabled && it.baseUrl.isNotBlank() && it.model.isNotBlank() }
+        val providers = providerHealth.orderProviders(
+            store.loadWithCatalog().filter { it.enabled && it.baseUrl.isNotBlank() && it.model.isNotBlank() }
+        )
         if (providers.isEmpty()) throw IllegalStateException("No hay proveedores utilizables. Abrí «IA y API» y configurá/activá uno; los proveedores sin clave también requieren conexión y modelo.")
         val failures = mutableListOf<String>()
         for (provider in providers) {
-            val credentials = if (provider.noKey) listOf("") else provider.apiKeys.filter { it.isNotBlank() }
-            if (credentials.isEmpty()) { failures += "${provider.name}: falta API key"; continue }
+            val capabilities = ProviderCapabilities.forProvider(provider)
+            val credentials = if (!capabilities.requiresApiKey) listOf("") else provider.apiKeys.filter { it.isNotBlank() }
+            if (credentials.isEmpty()) {
+                failures += "${provider.name}: falta API key"
+                continue
+            }
+            val providerStartedAt = System.currentTimeMillis()
             for (credential in credentials.take(10)) {
                 try {
-                    val response = when (provider.id) {
-                        "ai-horde" -> callAiHorde(provider, messages)
-                        "ollama" -> callOpenAiCompatible(provider, messages, null)
-                        "pollinations" -> callPollinations(provider, messages)
-                        else -> {
-                            if (provider.noKey) callPollinations(provider, messages)
-                            else callOpenAiCompatible(provider, messages, credential)
-                        }
+                    val response = when (capabilities.protocol) {
+                        ProviderProtocol.AI_HORDE_ASYNC -> callAiHorde(provider, messages)
+                        ProviderProtocol.POLLINATIONS_TEXT -> callPollinations(provider, messages)
+                        ProviderProtocol.ANTHROPIC_MESSAGES -> callAnthropic(provider, messages, credential)
+                        ProviderProtocol.OPENAI_CHAT_COMPLETIONS ->
+                            callOpenAiCompatible(provider, messages, credential.takeIf { it.isNotBlank() })
                     }
-                    if (response.isNotBlank()) return@withContext response to provider.name
+                    if (response.isNotBlank()) {
+                        providerHealth.recordSuccess(provider.id, System.currentTimeMillis() - providerStartedAt)
+                        return@withContext response to "${provider.name} · ${provider.model}"
+                    }
                     failures += "${provider.name}: respuesta vacía"
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    failures += "${provider.name}: ${e.message ?: e.javaClass.simpleName}"
+                    failures += "${provider.name}: ${sanitizeProviderError(e.message ?: e.javaClass.simpleName)}"
                 }
             }
+            providerHealth.recordFailure(provider.id)
         }
         throw IllegalStateException("Ningún proveedor respondió. " + failures.joinToString("; "))
+    }
+
+    suspend fun testProvider(provider: ProviderConfig): String = withContext(Dispatchers.IO) {
+        if (provider.baseUrl.isBlank() || provider.model.isBlank()) {
+            throw IllegalArgumentException("Completá la URL base y el modelo antes de probar.")
+        }
+        val capabilities = ProviderCapabilities.forProvider(provider)
+        val credentials = if (!capabilities.requiresApiKey) listOf("") else provider.apiKeys.filter { it.isNotBlank() }
+        if (credentials.isEmpty()) throw IllegalArgumentException("Este proveedor requiere al menos una API key.")
+        val startedAt = System.currentTimeMillis()
+        var lastError = "respuesta vacía"
+        for (credential in credentials.take(10)) {
+            try {
+                val response = when (capabilities.protocol) {
+                    ProviderProtocol.AI_HORDE_ASYNC -> callAiHorde(provider, listOf(ChatMessage("user", "Respondé únicamente: OK")))
+                    ProviderProtocol.POLLINATIONS_TEXT -> callPollinations(provider, listOf(ChatMessage("user", "Respondé únicamente: OK")))
+                    ProviderProtocol.ANTHROPIC_MESSAGES -> callAnthropic(provider, listOf(ChatMessage("user", "Respondé únicamente: OK")), credential)
+                    ProviderProtocol.OPENAI_CHAT_COMPLETIONS ->
+                        callOpenAiCompatible(provider, listOf(ChatMessage("user", "Respondé únicamente: OK")), credential.takeIf { it.isNotBlank() })
+                }
+                if (response.isNotBlank()) {
+                    val latency = System.currentTimeMillis() - startedAt
+                    providerHealth.recordSuccess(provider.id, latency)
+                    return@withContext "Conexión correcta con ${provider.name} · ${latency} ms."
+                }
+                lastError = "el proveedor devolvió una respuesta vacía"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                lastError = sanitizeProviderError(e.message ?: e.javaClass.simpleName)
+            }
+        }
+        providerHealth.recordFailure(provider.id)
+        throw IllegalStateException("No respondió ${provider.name}: $lastError")
+    }
+
+    private fun sanitizeProviderError(value: String): String = value
+        .replace(Regex("(?i)(https?://)[^/@\\s]+@"), "$1[REDACTED]@")
+        .replace(Regex("(?i)([?&](?:api[_-]?key|key|token|access_token|password)=)[^&\\s]+"), "$1[REDACTED]")
+        .take(500)
+
+    private fun readBounded(input: java.io.InputStream, maxChars: Int): String {
+        val output = StringBuilder(minOf(maxChars, 8192))
+        input.bufferedReader(Charsets.UTF_8).use { reader ->
+            val buffer = CharArray(8192)
+            while (true) {
+                val count = reader.read(buffer)
+                if (count < 0) break
+                if (output.length + count > maxChars) {
+                    throw IllegalStateException("La respuesta del proveedor supera el límite de $maxChars caracteres.")
+                }
+                output.append(buffer, 0, count)
+            }
+        }
+        return output.toString()
+    }
+
+    private companion object {
+        const val MAX_TEXT_RESPONSE_CHARS = 100_000
+        const val MAX_JSON_RESPONSE_CHARS = 500_000
     }
 
     private fun callPollinations(provider: ProviderConfig, messages: List<ChatMessage>): String {
@@ -50,13 +125,54 @@ class AiClient(private val store: SecureProviderStore) {
         try {
             val code = connection.responseCode
             if (code !in 200..299) throw IllegalStateException("HTTP $code")
-            return connection.inputStream.bufferedReader().use { it.readText() }.trim()
+            return readBounded(connection.inputStream, MAX_TEXT_RESPONSE_CHARS).trim()
+        } finally { connection.disconnect() }
+    }
+
+    /** Native Anthropic Messages API adapter; Anthropic is not OpenAI-compatible. */
+    private fun callAnthropic(provider: ProviderConfig, messages: List<ChatMessage>, credential: String): String {
+        val base = provider.baseUrl.trimEnd('/')
+        val endpoint = if (base.endsWith("/v1")) "$base/messages" else "$base/v1/messages"
+        val system = messages.filter { it.role == "system" }.joinToString("\n\n") { it.content }
+        val userMessages = messages.filter { it.role != "system" }.map {
+            JSONObject().put("role", if (it.role == "assistant") "assistant" else "user")
+                .put("content", it.content)
+        }
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; connectTimeout = 12000; readTimeout = 45000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("x-api-key", credential)
+            setRequestProperty("anthropic-version", "2023-06-01")
+        }
+        try {
+            val body = JSONObject()
+                .put("model", provider.model)
+                .put("max_tokens", 2048)
+                .put("messages", JSONArray().apply { userMessages.forEach { put(it) } })
+            if (system.isNotBlank()) body.put("system", system)
+            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                val stream = connection.errorStream ?: throw IllegalStateException("Anthropic HTTP $code")
+                val error = readBounded(stream, 12000)
+                throw IllegalStateException("Anthropic HTTP $code: $error")
+            }
+            val response = JSONObject(readBounded(connection.inputStream, MAX_JSON_RESPONSE_CHARS))
+            val content = response.optJSONArray("content") ?: JSONArray()
+            return (0 until content.length()).mapNotNull { i ->
+                content.optJSONObject(i)?.takeIf { it.optString("type") == "text" }?.optString("text")
+            }.joinToString("\n").trim()
         } finally { connection.disconnect() }
     }
 
     private fun callOpenAiCompatible(provider: ProviderConfig, messages: List<ChatMessage>, credential: String?): String {
         val base = provider.baseUrl.trimEnd('/')
-        val endpoint = if (base.endsWith("/v1")) "$base/chat/completions" else "$base/v1/chat/completions"
+        val endpoint = if (base.endsWith("/v1") || base.endsWith("/openai")) {
+            "$base/chat/completions"
+        } else {
+            "$base/v1/chat/completions"
+        }
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"; connectTimeout = 12000; readTimeout = 45000
             doOutput = true; setRequestProperty("Content-Type", "application/json")
@@ -69,13 +185,13 @@ class AiClient(private val store: SecureProviderStore) {
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
             if (code !in 200..299) throw IllegalStateException("HTTP $code")
-            val response = connection.inputStream.bufferedReader().use { it.readText() }
+            val response = readBounded(connection.inputStream, MAX_JSON_RESPONSE_CHARS)
             return JSONObject(response).getJSONArray("choices").getJSONObject(0)
                 .getJSONObject("message").getString("content").trim()
         } finally { connection.disconnect() }
     }
 
-    private fun callAiHorde(provider: ProviderConfig, messages: List<ChatMessage>): String {
+    private suspend fun callAiHorde(provider: ProviderConfig, messages: List<ChatMessage>): String {
         val prompt = messages.joinToString("\n\n") { "${it.role}: ${it.content}" } + "\n\nassistant:"
         val base = provider.baseUrl.trimEnd('/')
         val request = JSONObject().put("prompt", prompt)
@@ -94,12 +210,12 @@ class AiClient(private val store: SecureProviderStore) {
             start.outputStream.use { it.write(request.toString().toByteArray(Charsets.UTF_8)) }
             val code = start.responseCode
             if (code !in 200..299) throw IllegalStateException("AI Horde HTTP $code")
-            id = JSONObject(start.inputStream.bufferedReader().use { it.readText() }).optString("id")
+            id = JSONObject(readBounded(start.inputStream, MAX_JSON_RESPONSE_CHARS)).optString("id")
             if (id.isBlank()) throw IllegalStateException("AI Horde no devolvió ID de generación")
         } finally { start.disconnect() }
 
         repeat(24) {
-            Thread.sleep(1500)
+            delay(1500)
             val poll = (URL("$base/generate/status/$id").openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"; connectTimeout = 8000; readTimeout = 10000
                 setRequestProperty("apikey", "0000000000")
@@ -108,7 +224,7 @@ class AiClient(private val store: SecureProviderStore) {
             try {
                 val code = poll.responseCode
                 if (code !in 200..299) throw IllegalStateException("AI Horde status HTTP $code")
-                val json = JSONObject(poll.inputStream.bufferedReader().use { it.readText() })
+                val json = JSONObject(readBounded(poll.inputStream, MAX_JSON_RESPONSE_CHARS))
                 if (json.optBoolean("faulted", false)) throw IllegalStateException("AI Horde falló la generación")
                 if (json.optBoolean("done", false)) {
                     val generations = json.optJSONArray("generations")

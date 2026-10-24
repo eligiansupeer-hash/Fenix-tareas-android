@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** Encrypts provider configuration, including API keys, with an Android Keystore AES-GCM key. */
 class SecureProviderStore(context: Context) {
-    private val appContext = context.applicationContext
+    internal val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences("fenix_ai_secure", Context.MODE_PRIVATE)
     private val alias = "fenix_provider_config_v1"
 
@@ -52,8 +52,19 @@ class SecureProviderStore(context: Context) {
         } catch (_: Exception) { emptyList() }
         val existing = load()
         if (catalog.isEmpty()) return existing
+        val catalogById = catalog.associateBy { it.id }
         val existingIds = existing.map { it.id }.toSet()
-        val merged = if (existing.isEmpty()) catalog else existing + catalog.filter { it.id !in existingIds }
+        // Add new catalog providers and fill only missing defaults on existing entries.
+        // Never replace a URL/model/key the user has already configured.
+        val upgraded = existing.map { saved ->
+            val defaults = catalogById[saved.id] ?: return@map saved
+            saved.copy(
+                baseUrl = saved.baseUrl.ifBlank { defaults.baseUrl },
+                model = saved.model.ifBlank { defaults.model },
+                apiKeyUrl = saved.apiKeyUrl.ifBlank { defaults.apiKeyUrl }
+            )
+        }
+        val merged = if (existing.isEmpty()) catalog else upgraded + catalog.filter { it.id !in existingIds }
         if (merged != existing) save(merged)
         return merged
     }

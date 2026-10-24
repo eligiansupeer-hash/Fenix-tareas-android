@@ -1,25 +1,38 @@
 package app.fenix.tareas.scheduler
+
 import android.content.Context
+import androidx.work.BackoffPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import app.fenix.tareas.data.TaskEntity
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+
 object TaskScheduler {
-    fun enqueue(context: Context, taskId: Long, runAtMillis: Long? = null) {
+    fun enqueue(
+        context: Context,
+        taskId: Long,
+        runAtMillis: Long? = null,
+        appendAfterCurrent: Boolean = false
+    ) {
         val delay = ((runAtMillis ?: System.currentTimeMillis()) - System.currentTimeMillis()).coerceAtLeast(0L)
         val request = OneTimeWorkRequestBuilder<TaskWorker>()
             .setInputData(workDataOf(TaskWorker.KEY_TASK_ID to taskId))
             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-            .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
-            .addTag("fenix-task-$taskId").build()
-        WorkManager.getInstance(context).enqueueUniqueWork("fenix-task-$taskId", androidx.work.ExistingWorkPolicy.REPLACE, request)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
+            .addTag("fenix-task-$taskId")
+            .build()
+        val policy = if (appendAfterCurrent) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE
+        WorkManager.getInstance(context).enqueueUniqueWork("fenix-task-$taskId", policy, request)
     }
+
     fun schedule(context: Context, task: TaskEntity) {
         val time = task.scheduleAtMillis ?: return
         enqueue(context, task.id, if (task.repeatDays.isBlank()) time else nextWeeklyRun(task, System.currentTimeMillis()))
     }
+
     fun nextWeeklyRun(task: TaskEntity, afterMillis: Long): Long {
         val hour = task.scheduleHour ?: 9
         val minute = task.scheduleMinute ?: 0
@@ -38,6 +51,7 @@ object TaskScheduler {
         }
         return afterMillis + TimeUnit.DAYS.toMillis(7)
     }
+
     fun cancel(context: Context, taskId: Long) {
         WorkManager.getInstance(context).cancelUniqueWork("fenix-task-$taskId")
         WorkManager.getInstance(context).cancelAllWorkByTag("fenix-task-$taskId")

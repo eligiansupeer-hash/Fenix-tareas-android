@@ -1,4 +1,5 @@
 package app.fenix.tareas.data
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 @Entity(tableName = "tasks")
@@ -14,5 +15,6 @@ data class TaskEntity(
     val createdAtMillis: Long = System.currentTimeMillis(),
     val repeatDays: String = "",
     val scheduleHour: Int? = null,
-    val scheduleMinute: Int? = null
+    val scheduleMinute: Int? = null,
+    @ColumnInfo(defaultValue = "''") val workflowSteps: String = ""
 )
