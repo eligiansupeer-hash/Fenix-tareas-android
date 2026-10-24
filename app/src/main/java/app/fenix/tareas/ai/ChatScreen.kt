@@ -135,7 +135,12 @@ fun ChatScreen() {
                     } catch (e: Exception) {
                         failedPrompt = prompt
                         input = prompt
-                        error = e.message ?: "No se pudo completar la solicitud."
+                        val detail = e.message ?: "No se pudo completar la solicitud."
+                        error = try {
+                            ProviderDiagnostics.explain(detail, store.loadWithCatalog())
+                        } catch (_: Exception) {
+                            detail
+                        }
                     } finally { busy = false }
         }
     }
